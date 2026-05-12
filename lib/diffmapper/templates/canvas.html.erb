@@ -661,64 +661,117 @@ function resetLayout() {
 
 // Layout
 function layoutCards() {
-  const clusters = buildClusters();
-  let y = GAP;
-  const leftX = GAP;
-  const rightX = GAP + CARD_WIDTH + PAIR_GAP;
-
-  // Remove old cluster labels
-  document.querySelectorAll('.cluster-label').forEach(el => el.remove());
-
-  clusters.forEach(cluster => {
-    // Add cluster label
-    if (cluster.label) {
-      const label = document.createElement('div');
-      label.className = 'cluster-label';
-      label.textContent = cluster.label;
-      label.style.left = leftX + 'px';
-      label.style.top = y + 'px';
-      document.getElementById('canvasInner').appendChild(label);
-      y += 24;
-    }
-
-    // Layout pairs in this cluster
-    cluster.pairs.forEach(([source, spec]) => {
-      const sourceEl = document.getElementById('card-' + source.id);
-      const specEl = document.getElementById('card-' + spec.id);
-      if (!sourceEl || !specEl) return;
-
-      sourceEl.style.left = leftX + 'px';
-      sourceEl.style.top = y + 'px';
-      specEl.style.left = rightX + 'px';
-      specEl.style.top = y + 'px';
-
-      y += Math.max(sourceEl.offsetHeight, specEl.offsetHeight) + GAP;
-    });
-
-    // Layout singles in this cluster
-    cluster.singles.forEach(file => {
-      const el = document.getElementById('card-' + file.id);
-      if (!el) return;
-      const col = file.type === 'spec' ? rightX : leftX;
-      el.style.left = col + 'px';
-      el.style.top = y + 'px';
-      y += el.offsetHeight + GAP;
-    });
-
-    // Extra gap between clusters
-    y += GAP / 2;
-  });
-
-  // Size the canvas
-  document.getElementById('canvasInner').style.minHeight = (y + 200) + 'px';
-  document.getElementById('canvasInner').style.minWidth = (rightX + CARD_WIDTH + GAP) + 'px';
-
-  // Show all cards
+  // Show all cards first so we can measure them
   document.querySelectorAll('.card').forEach(card => {
     card.style.visibility = 'visible';
   });
 
-  storePositions();
+  // Remove old cluster labels
+  document.querySelectorAll('.cluster-label').forEach(el => el.remove());
+
+  // Seed initial positions by walking the call graph
+  seedByCallGraph();
+
+  // Refine with force-directed layout
+  forceDirectedRefine();
+}
+
+function seedByCallGraph() {
+  const cards = Array.from(document.querySelectorAll('.card'));
+  const nodeMap = new Map(cards.map(el => {
+    const id = el.id.replace('card-', '');
+    return [id, el];
+  }));
+
+  // Build adjacency from non-test connections
+  const callEdges = CONNECTIONS.filter(c => c.type !== 'test');
+  const calledBy = new Map(); // child -> parent
+  callEdges.forEach(c => {
+    if (!calledBy.has(c.to)) calledBy.set(c.to, []);
+    calledBy.get(c.to).push(c.from);
+  });
+
+  // Find roots: nodes that call others but aren't called by anyone
+  const allTargets = new Set(callEdges.map(c => c.to));
+  const allSources = new Set(callEdges.map(c => c.from));
+  const roots = [...allSources].filter(id => !allTargets.has(id));
+
+  // Assign depth via BFS from roots
+  const depth = new Map();
+  const queue = roots.map(id => ({ id, d: 0 }));
+  // Also add all nodes not in any call edge at depth 0
+  nodeMap.forEach((_, id) => {
+    if (!allSources.has(id) && !allTargets.has(id) && !depth.has(id)) {
+      queue.push({ id, d: 0 });
+    }
+  });
+
+  while (queue.length > 0) {
+    const { id, d } = queue.shift();
+    if (depth.has(id)) continue;
+    depth.set(id, d);
+    // Find nodes this one calls
+    callEdges.filter(c => c.from === id).forEach(c => {
+      if (!depth.has(c.to)) queue.push({ id: c.to, d: d + 1 });
+    });
+  }
+  // Assign remaining nodes
+  nodeMap.forEach((_, id) => { if (!depth.has(id)) depth.set(id, 0); });
+
+  // Group by depth, find test pairs
+  const testPairs = new Map();
+  CONNECTIONS.filter(c => c.type === 'test').forEach(c => {
+    testPairs.set(c.from, c.to); // spec -> source
+    testPairs.set(c.to, c.from); // source -> spec
+  });
+
+  // Position: each depth level is a row, pairs side by side
+  const placed = new Set();
+  const maxDepth = Math.max(...depth.values());
+  let y = GAP;
+
+  for (let d = 0; d <= maxDepth; d++) {
+    const nodesAtDepth = [...depth.entries()]
+      .filter(([_, dd]) => dd === d)
+      .map(([id]) => id)
+      .filter(id => !placed.has(id));
+
+    if (nodesAtDepth.length === 0) continue;
+
+    let x = GAP;
+    nodesAtDepth.forEach(id => {
+      if (placed.has(id)) return;
+      const el = nodeMap.get(id);
+      if (!el) return;
+
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      placed.add(id);
+
+      // Place test pair next to it
+      const pairId = testPairs.get(id);
+      if (pairId && !placed.has(pairId)) {
+        const pairEl = nodeMap.get(pairId);
+        if (pairEl) {
+          pairEl.style.left = (x + el.offsetWidth + PAIR_GAP) + 'px';
+          pairEl.style.top = y + 'px';
+          placed.add(pairId);
+          x += el.offsetWidth + PAIR_GAP + pairEl.offsetWidth + GAP * 2;
+        }
+      } else {
+        x += el.offsetWidth + GAP * 2;
+      }
+    });
+
+    // Find max height in this row
+    const rowEls = nodesAtDepth.map(id => nodeMap.get(id)).filter(Boolean);
+    const maxH = Math.max(...rowEls.map(el => el.offsetHeight));
+    y += maxH + GAP * 2;
+  }
+
+  // Size canvas for initial layout
+  document.getElementById('canvasInner').style.minHeight = (y + 400) + 'px';
+  document.getElementById('canvasInner').style.minWidth = '2500px';
 }
 
 function buildClusters() {
@@ -757,14 +810,257 @@ function buildClusters() {
 }
 
 function formatClusterLabel(dir) {
-  // "controllers/team_projects" → "Controllers / Team Projects"
   return dir.split('/').map(part =>
     part.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
   ).join(' / ');
 }
 
+function forceDirectedRefine() {
+  const cards = Array.from(document.querySelectorAll('.card'));
+  if (cards.length === 0) return;
+
+  // Build node data
+  const allNodes = cards.map(el => ({
+    el: el,
+    id: el.id.replace('card-', ''),
+    x: parseFloat(el.style.left) || 0,
+    y: parseFloat(el.style.top) || 0,
+    w: el.offsetWidth,
+    h: el.offsetHeight
+  }));
+  const nodeMap = new Map(allNodes.map(n => [n.id, n]));
+
+  // Build units: pairs become single units, singles are their own unit
+  const units = buildLayoutUnits(nodeMap);
+  const edges = buildLayoutEdges(nodeMap, units);
+
+  // Initialize velocities
+  units.forEach(u => { u.vx = 0; u.vy = 0; });
+
+  // Simulation
+  const ITERATIONS = 120;
+  const REPULSION = 60000;
+  const ATTRACTION = 0.004;
+  const DIRECTIONAL_BIAS = 0.02;
+  const DAMPING = 0.75;
+  const MIN_DIST = 30;
+
+  const cx = units.reduce((s, u) => s + u.x + u.w / 2, 0) / units.length;
+  const cy = units.reduce((s, u) => s + u.y + u.h / 2, 0) / units.length;
+
+  for (let iter = 0; iter < ITERATIONS; iter++) {
+    units.forEach(u => { u.vx = 0; u.vy = 0; });
+
+    // Repulsion between all unit pairs
+    for (let i = 0; i < units.length; i++) {
+      for (let j = i + 1; j < units.length; j++) {
+        applyRepulsion(units[i], units[j], REPULSION, MIN_DIST);
+      }
+    }
+
+    // Attraction along edges + directional bias
+    edges.forEach(e => {
+      applyAttraction(e.source, e.target, ATTRACTION);
+      // For "calls" edges, bias caller above callee
+      if (e.type === 'calls' || e.type === 'passes_prop') {
+        const dy = e.target.y - e.source.y;
+        if (dy < 100) {
+          // Push target down, source up
+          e.source.vy -= DIRECTIONAL_BIAS * (100 - dy);
+          e.target.vy += DIRECTIONAL_BIAS * (100 - dy);
+        }
+      }
+    });
+
+    // Gentle gravity toward center
+    units.forEach(u => {
+      u.vx += (cx - (u.x + u.w / 2)) * 0.0005;
+      u.vy += (cy - (u.y + u.h / 2)) * 0.0005;
+    });
+
+    // Apply velocities with cooling
+    const cooling = 1 - (iter / ITERATIONS) * 0.7;
+    units.forEach(u => {
+      u.x += u.vx * DAMPING * cooling;
+      u.y += u.vy * DAMPING * cooling;
+    });
+  }
+
+  // Normalize: shift so minimum x,y is at GAP
+  const minX = Math.min(...units.map(u => u.x));
+  const minY = Math.min(...units.map(u => u.y));
+  const shiftX = GAP - minX;
+  const shiftY = GAP - minY;
+
+  // Apply final positions back to DOM
+  units.forEach(u => {
+    u.x += shiftX;
+    u.y += shiftY;
+    applyUnitPosition(u);
+  });
+
+  // Resize canvas
+  const maxX = Math.max(...units.map(u => u.x + u.w));
+  const maxY = Math.max(...units.map(u => u.y + u.h));
+  document.getElementById('canvasInner').style.minWidth = (maxX + GAP * 2) + 'px';
+  document.getElementById('canvasInner').style.minHeight = (maxY + GAP * 2) + 'px';
+
+  repositionClusterLabels(allNodes.map(n => ({
+    ...n,
+    x: parseFloat(n.el.style.left) || 0,
+    y: parseFloat(n.el.style.top) || 0
+  })));
+
+  storePositions();
+}
+
+function buildLayoutUnits(nodeMap) {
+  const units = [];
+  const paired = new Set();
+
+  // Test connections become rigid pairs
+  CONNECTIONS.filter(c => c.type === 'test').forEach(c => {
+    const source = nodeMap.get(c.to);  // the source file
+    const spec = nodeMap.get(c.from);  // the spec file
+    if (!source || !spec) return;
+
+    paired.add(source.id);
+    paired.add(spec.id);
+
+    units.push({
+      type: 'pair',
+      source: source,
+      spec: spec,
+      x: Math.min(source.x, spec.x),
+      y: Math.min(source.y, spec.y),
+      w: source.w + PAIR_GAP + spec.w,
+      h: Math.max(source.h, spec.h)
+    });
+  });
+
+  // Unpaired nodes are their own units
+  nodeMap.forEach((node, id) => {
+    if (paired.has(id)) return;
+    units.push({
+      type: 'single',
+      node: node,
+      x: node.x,
+      y: node.y,
+      w: node.w,
+      h: node.h
+    });
+  });
+
+  return units;
+}
+
+function buildLayoutEdges(nodeMap, units) {
+  const unitForNode = new Map();
+  units.forEach(u => {
+    if (u.type === 'pair') {
+      unitForNode.set(u.source.id, u);
+      unitForNode.set(u.spec.id, u);
+    } else {
+      unitForNode.set(u.node.id, u);
+    }
+  });
+
+  // Only non-test connections (test connections are already rigid pairs)
+  return CONNECTIONS
+    .filter(c => c.type !== 'test')
+    .map(c => ({
+      source: unitForNode.get(c.from),
+      target: unitForNode.get(c.to),
+      type: c.type
+    }))
+    .filter(e => e.source && e.target && e.source !== e.target);
+}
+
+function applyUnitPosition(unit) {
+  if (unit.type === 'pair') {
+    unit.source.el.style.left = Math.round(unit.x) + 'px';
+    unit.source.el.style.top = Math.round(unit.y) + 'px';
+    unit.spec.el.style.left = Math.round(unit.x + unit.source.w + PAIR_GAP) + 'px';
+    unit.spec.el.style.top = Math.round(unit.y) + 'px';
+  } else {
+    unit.node.el.style.left = Math.round(unit.x) + 'px';
+    unit.node.el.style.top = Math.round(unit.y) + 'px';
+  }
+}
+
+function applyRepulsion(a, b, strength, minDist) {
+  // Use rectangle edge-to-edge distance, not center-to-center
+  const ax1 = a.x, ay1 = a.y, ax2 = a.x + a.w, ay2 = a.y + a.h;
+  const bx1 = b.x, by1 = b.y, bx2 = b.x + b.w, by2 = b.y + b.h;
+
+  // Separation on each axis (negative = overlapping)
+  const sepX = Math.max(bx1 - ax2, ax1 - bx2);
+  const sepY = Math.max(by1 - ay2, ay1 - by2);
+  const overlapping = sepX < minDist && sepY < minDist;
+
+  // Direction from a center to b center
+  const dx = (a.x + a.w / 2) - (b.x + b.w / 2);
+  const dy = (a.y + a.h / 2) - (b.y + b.h / 2);
+  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+  if (overlapping) {
+    // Strong push based on overlap amount
+    const pushX = (minDist - sepX) * (dx >= 0 ? 1 : -1);
+    const pushY = (minDist - sepY) * (dy >= 0 ? 1 : -1);
+    a.vx += pushX * 0.3;
+    a.vy += pushY * 0.3;
+    b.vx -= pushX * 0.3;
+    b.vy -= pushY * 0.3;
+  } else {
+    // Normal distance-based repulsion
+    const force = strength / (dist * dist);
+    a.vx += (dx / dist) * force;
+    a.vy += (dy / dist) * force;
+    b.vx -= (dx / dist) * force;
+    b.vy -= (dy / dist) * force;
+  }
+}
+
+function applyAttraction(a, b, strength) {
+  const dx = (b.x + b.w / 2) - (a.x + a.w / 2);
+  const dy = (b.y + b.h / 2) - (a.y + a.h / 2);
+  a.vx += dx * strength;
+  a.vy += dy * strength;
+  b.vx -= dx * strength;
+  b.vy -= dy * strength;
+}
+
+function repositionClusterLabels(nodes) {
+  // Remove old labels and re-add based on where nodes actually ended up
+  document.querySelectorAll('.cluster-label').forEach(el => el.remove());
+  const clusters = buildClusters();
+  const canvasInner = document.getElementById('canvasInner');
+
+  clusters.forEach(cluster => {
+    const clusterNodeIds = [
+      ...cluster.pairs.flatMap(([s, t]) => [s.id, t.id]),
+      ...cluster.singles.map(f => f.id)
+    ];
+    const clusterNodes = clusterNodeIds
+      .map(id => nodes.find(n => n.id === id))
+      .filter(Boolean);
+    if (clusterNodes.length === 0) return;
+
+    const minX = Math.min(...clusterNodes.map(n => n.x));
+    const minY = Math.min(...clusterNodes.map(n => n.y));
+
+    const label = document.createElement('div');
+    label.className = 'cluster-label';
+    label.textContent = cluster.label;
+    label.style.left = minX + 'px';
+    label.style.top = (minY - 20) + 'px';
+    canvasInner.appendChild(label);
+  });
+}
+
 function tidyLayout() {
   layoutCards();
+  forceDirectedRefine();
   drawConnections();
 }
 

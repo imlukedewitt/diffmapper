@@ -144,3 +144,63 @@ Done. "Expand All Diffs" button toggles all diffs open/closed and triggers tidy 
 - localStorage persistence for notes and card positions
 - Minimap for large PRs
 - Connection line arrowheads for directionality
+- Zoom in/out support for when the canvas requires scrolling
+
+## Current Work: Spatial Layout Algorithm
+
+The big remaining problem. The canvas should feel like a hand-arranged map, not a grid or column layout. Connected files should cluster, connection lines should be short and not cross, and independent groups should fill available space naturally.
+
+### What we want (reference: user's manual arrangement)
+
+The user manually rearranged the enriched PR canvas to show the ideal layout. Key patterns:
+- **Data flows top-to-bottom** — controllers at top, services below them, following call graph
+- **Test pairs always side by side** — source left, spec right, short "tests" line between them
+- **"calls" connections flow downward** — creating natural reading order
+- **Independent groups (frontend, orphan specs) fill available space** — not forced to a specific position, just placed where there's room
+- **Connection lines are short and don't cross** — this is the most important visual quality
+
+### Approach 1: Two-column seed (original)
+Simple two-column layout: all sources on left at x=60, all specs on right at x=520. Paired files at same Y.
+
+**Good:** Simple, predictable, test pairs always aligned. No overlaps.
+**Bad:** Rigid column layout defeats the purpose of a "canvas". Everything vertical. No spatial organization.
+
+### Approach 2: Directory cluster grid seed + force-directed refinement
+Grouped files by directory into clusters. Placed clusters in a grid pattern (using `Math.sqrt(clusters.length)` columns). Then ran force-directed simulation to refine.
+
+**Good:** Horizontal spread, cluster labels showing file groupings, cards no longer strictly vertical.
+**Bad:** Related clusters (e.g., controllers/team_projects and services/team_projects) ended up on opposite sides of the grid because grid position was based on cluster index, not relationships. Connection lines crossed heavily.
+
+### Approach 3: Call-graph depth seed + force-directed refinement (current)
+Walked the connection graph to assign depth (callers = shallow, callees = deep). Placed nodes at Y positions by depth, spread horizontally within each depth level. Test pairs placed side by side.
+
+**Good:** Directional flow concept is right. Test pairs stay together.
+**Bad:** Most nodes end up at depth 0 because the call graph in a typical diff is sparse (only a few "calls" connections). Result is everything in one horizontal row with a few stragglers below. Long diagonal connection lines.
+
+### Force-directed simulation details (shared across approaches)
+The force sim runs after the initial seed. Current implementation:
+- **Rigid test pairs** — source+spec move as one unit (this works well, keep it)
+- **Rectangle-based repulsion** — uses actual card edge-to-edge distance, strong push when overlapping (this works well, no overlaps in tests)
+- **Attraction along non-test edges** — pulls connected units together
+- **Directional bias on "calls" edges** — biases callers above callees (good concept but weak effect)
+- **Gravity toward center of mass** — prevents drift
+- **Cooling schedule** — force reduces over iterations
+- Parameters: 120 iterations, repulsion=60000, attraction=0.004, directional_bias=0.02
+- Browser test verifies zero card overlaps after layout
+
+### What to try next
+The core issue is the **initial seed determines the topology** and the force sim can only refine locally — it can't fundamentally rearrange which nodes are left vs right of each other. Ideas:
+
+1. **Smarter seed: place connected clusters near each other.** Before laying out individual cards, figure out which clusters are connected and place them adjacently. The grid approach placed them by index; instead, walk the inter-cluster connection graph.
+
+2. **Edge crossing minimization pass.** After the force sim, run a few iterations that specifically detect and reduce edge crossings by swapping node positions.
+
+3. **Layered graph layout (dagre-style).** Assign ranks not just from the call graph but also from directory structure (controllers above services above models). Within each rank, order nodes to minimize crossings. This is more prescriptive but matches how developers think about code.
+
+4. **Hybrid approach.** Use directory clustering for the *general area* (controllers in one zone, services in another, frontend in another) but use the call graph to determine the *order within and between* zones.
+
+### Key files
+- `lib/diffmapper/templates/canvas.html.erb` — all JS layout code lives here (functions: `layoutCards`, `seedByCallGraph`, `forceDirectedRefine`, `buildLayoutUnits`, `buildLayoutEdges`, `applyRepulsion`, `applyAttraction`, `buildClusters`, `repositionClusterLabels`)
+- `lib/diffmapper/renderer.rb` — `grouped_files_json` and `file_layout_data` provide data to the JS layout
+- `spec/browser/canvas_spec.rb` — browser test `"does not have overlapping cards after layout"` verifies no overlaps
+- `spec/support/browser_helper.rb` — `count_card_overlaps` helper measures overlaps via JS evaluation

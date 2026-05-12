@@ -26,4 +26,34 @@ module BrowserTestHelper
     visit "file://#{path}"
     path
   end
+
+  def count_card_overlaps
+    rects = card_rects
+    count = 0
+    rects.each_with_index do |a, i|
+      rects[(i + 1)..].each { |b| count += 1 if rects_overlap?(a, b) }
+    end
+    count
+  end
+
+  def card_rects
+    page.evaluate_script(<<~JS)
+      Array.from(document.querySelectorAll('.card')).map(el => ({
+        left: el.offsetLeft, top: el.offsetTop,
+        width: el.offsetWidth, height: el.offsetHeight
+      }))
+    JS
+  end
+
+  def rects_overlap?(rect_a, rect_b)
+    overlaps_horizontally?(rect_a, rect_b) && overlaps_vertically?(rect_a, rect_b)
+  end
+
+  def overlaps_horizontally?(rect_a, rect_b)
+    rect_a["left"] < rect_b["left"] + rect_b["width"] && rect_a["left"] + rect_a["width"] > rect_b["left"]
+  end
+
+  def overlaps_vertically?(rect_a, rect_b)
+    rect_a["top"] < rect_b["top"] + rect_b["height"] && rect_a["top"] + rect_a["height"] > rect_b["top"]
+  end
 end

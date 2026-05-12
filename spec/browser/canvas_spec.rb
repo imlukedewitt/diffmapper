@@ -87,6 +87,11 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(page).to have_css(".cluster-label", minimum: 1)
   end
 
+  it "does not have overlapping cards after layout" do
+    visit_generated_html
+    expect(count_card_overlaps).to eq(0)
+  end
+
   it "expand all diffs opens all diff sections" do
     visit_generated_html
     click_button "Expand All Diffs"
