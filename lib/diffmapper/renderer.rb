@@ -41,10 +41,22 @@ module Diffmapper
     def grouped_files_json
       groups = grouped_files
       {
-        paired: groups[:paired].map { |s, t| [{ id: s[:id] }, { id: t[:id] }] },
-        unpaired_sources: groups[:unpaired_sources].map { |f| { id: f[:id] } },
-        unpaired_specs: groups[:unpaired_specs].map { |f| { id: f[:id] } }
+        paired: groups[:paired].map { |s, t| [file_layout_data(s), file_layout_data(t)] },
+        unpaired_sources: groups[:unpaired_sources].map { |f| file_layout_data(f) },
+        unpaired_specs: groups[:unpaired_specs].map { |f| file_layout_data(f) }
       }.to_json
+    end
+
+    def file_layout_data(file)
+      { id: file[:id], type: file[:type], dir: file_directory(file[:path]) }
+    end
+
+    def file_directory(path)
+      # Extract meaningful directory grouping
+      # e.g., "app/controllers/team_projects/archive_controller.rb" → "controllers/team_projects"
+      # e.g., "frontend/js/ProjectArchive/ArchiveOptions.js" → "frontend/js/ProjectArchive"
+      dir = File.dirname(path)
+      dir.sub(%r{^(app|spec|test)/}, "")
     end
 
     def build_pairs(specs, sources)

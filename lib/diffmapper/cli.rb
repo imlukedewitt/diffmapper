@@ -6,6 +6,7 @@ module Diffmapper
     extend Dry::Initializer
 
     param :args, default: -> { [] }
+    option :stdin, default: -> {}
 
     COMMANDS = %w[parse render preview].freeze
 
@@ -50,6 +51,8 @@ module Diffmapper
     def read_diff
       if diff_ref
         run_git_diff(diff_ref)
+      elsif stdin
+        stdin
       elsif !$stdin.tty?
         $stdin.read
       else

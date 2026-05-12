@@ -63,6 +63,15 @@
 
   .top-bar .controls { margin-left: auto; display: flex; gap: 8px; }
 
+  .open-questions {
+    font-size: 11px;
+    color: var(--orange);
+    font-weight: 500;
+    padding: 2px 8px;
+    background: rgba(224, 175, 104, 0.1);
+    border-radius: 4px;
+  }
+
   .top-bar button {
     background: var(--surface-hover);
     border: 1px solid var(--border);
@@ -193,6 +202,14 @@
     margin-top: 6px;
     font-size: 12px;
   }
+  [contenteditable]:hover {
+    outline: 1px dashed var(--border);
+    outline-offset: 2px;
+  }
+  [contenteditable]:focus {
+    outline: 1px solid var(--blue);
+    outline-offset: 2px;
+  }
 
   .card-details {
     margin-top: 6px;
@@ -222,6 +239,97 @@
   .annotation.observation { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
   .annotation.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
   .annotation.concern { background: rgba(247,118,142,0.12); border-left: 2px solid var(--red); color: var(--red); }
+
+  .card-annotations {
+    margin-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    padding-top: 6px;
+  }
+  .annotation-item {
+    padding: 4px 8px;
+    margin-bottom: 4px;
+    border-radius: 4px;
+    font-size: 11px;
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .annotation-item.observation { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
+  .annotation-item.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
+  .annotation-item.concern { background: rgba(247,118,142,0.12); border-left: 2px solid var(--red); color: var(--red); }
+  .annotation-text {
+    flex: 1;
+    cursor: text;
+  }
+  .annotation-delete {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    padding: 0 2px;
+  }
+  .annotation-item:hover .annotation-delete { opacity: 0.7; }
+  .annotation-delete:hover { opacity: 1 !important; }
+  .add-annotation-btn {
+    margin-top: 4px;
+    padding: 3px 8px;
+    font-size: 10px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    width: 100%;
+    text-align: left;
+  }
+  .add-annotation-btn:hover { border-color: var(--text-dim); color: var(--text); }
+  .annotation-input-area { margin-top: 4px; }
+  .annotation-input {
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 11px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 32px;
+  }
+  .annotation-input:focus { outline: none; border-color: var(--blue); }
+  .annotation-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .annotation-actions button {
+    padding: 2px 8px;
+    font-size: 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+    border: 1px solid var(--border);
+  }
+  .annotation-save { background: rgba(122,162,247,0.2); color: var(--blue); }
+  .annotation-save:hover { background: rgba(122,162,247,0.3); }
+  .annotation-cancel { background: transparent; color: var(--text-dim); }
+  .annotation-cancel:hover { color: var(--text); }
+  .annotation-type-select {
+    padding: 2px 4px;
+    font-size: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 3px;
+    font-family: inherit;
+    cursor: pointer;
+  }
 
   .card-diff {
     margin-top: 8px;
@@ -279,6 +387,17 @@
   .legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
   .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
+  .cluster-label {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    z-index: 5;
+    pointer-events: none;
+  }
+
   .context-bar {
     position: fixed;
     top: 46px; left: 0; right: 0;
@@ -324,8 +443,11 @@
   <%- if context && context[:description] -%>
   <button class="context-toggle" onclick="toggleContext()" id="contextToggle">▸ Details</button>
   <%- end -%>
+  <span id="openQuestions" class="open-questions" style="display:none;"></span>
   <div class="controls">
     <button onclick="resetLayout()">Reset Layout</button>
+    <button onclick="tidyLayout()">Tidy Layout</button>
+    <button onclick="toggleAllDiffs()">Expand All Diffs</button>
     <button onclick="toggleConnections()">Toggle Lines</button>
   </div>
 </div>
@@ -356,21 +478,41 @@
           <span class="del">-<%= file[:deletions] %></span>
         </div>
         <%- if file[:summary] -%>
-        <div class="card-summary"><%= file[:summary] %></div>
+        <div class="card-summary" contenteditable="true"><%= file[:summary] %></div>
         <%- end -%>
         <%- (file[:details] || []).each do |detail| -%>
         <%- if detail[:description] -%>
         <details class="card-details">
           <summary><%= detail[:label] %></summary>
-          <div class="detail-content"><%= detail[:description] %></div>
+          <div class="detail-content" contenteditable="true"><%= detail[:description] %></div>
         </details>
         <%- else -%>
         <div class="changed-section"><%= detail[:label] %></div>
         <%- end -%>
         <%- end -%>
-        <%- (file[:annotations] || []).each do |ann| -%>
-        <div class="annotation <%= ann[:type] %>"><%= ann[:text] %></div>
-        <%- end -%>
+        <div class="card-annotations">
+          <div class="annotations-list">
+            <%- (file[:annotations] || []).each do |ann| -%>
+            <div class="annotation-item <%= ann[:type] %>" data-annotation-type="<%= ann[:type] %>">
+              <span class="annotation-text" contenteditable="true"><%= ann[:text] %></span>
+              <button class="annotation-delete" onclick="deleteAnnotation(this)">×</button>
+            </div>
+            <%- end -%>
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="observation">Observation</option>
+                <option value="question">Question</option>
+                <option value="concern">Concern</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
         <%- if file[:hunks] -%>
         <details class="card-diff" ontoggle="drawConnections()">
           <summary>View diff</summary>
@@ -405,7 +547,7 @@ document.querySelectorAll('.card').forEach(card => {
   card.addEventListener('mousedown', (e) => {
     topZ++;
     card.style.zIndex = topZ;
-    if (['SUMMARY','BUTTON','TEXTAREA','INPUT'].includes(e.target.tagName)) return;
+    if (['SUMMARY','BUTTON','TEXTAREA','INPUT'].includes(e.target.tagName) || e.target.isContentEditable) return;
     dragCard = card;
     dragCard.classList.add('dragging');
     const rect = card.getBoundingClientRect();
@@ -519,47 +661,56 @@ function resetLayout() {
 
 // Layout
 function layoutCards() {
+  const clusters = buildClusters();
   let y = GAP;
   const leftX = GAP;
   const rightX = GAP + CARD_WIDTH + PAIR_GAP;
 
-  // Paired source + spec side by side
-  GROUPS.paired.forEach(([source, spec]) => {
-    const sourceEl = document.getElementById('card-' + source.id);
-    const specEl = document.getElementById('card-' + spec.id);
-    if (!sourceEl || !specEl) return;
+  // Remove old cluster labels
+  document.querySelectorAll('.cluster-label').forEach(el => el.remove());
 
-    sourceEl.style.left = leftX + 'px';
-    sourceEl.style.top = y + 'px';
-    specEl.style.left = rightX + 'px';
-    specEl.style.top = y + 'px';
+  clusters.forEach(cluster => {
+    // Add cluster label
+    if (cluster.label) {
+      const label = document.createElement('div');
+      label.className = 'cluster-label';
+      label.textContent = cluster.label;
+      label.style.left = leftX + 'px';
+      label.style.top = y + 'px';
+      document.getElementById('canvasInner').appendChild(label);
+      y += 24;
+    }
 
-    const rowHeight = Math.max(sourceEl.offsetHeight, specEl.offsetHeight);
-    y += rowHeight + GAP;
-  });
+    // Layout pairs in this cluster
+    cluster.pairs.forEach(([source, spec]) => {
+      const sourceEl = document.getElementById('card-' + source.id);
+      const specEl = document.getElementById('card-' + spec.id);
+      if (!sourceEl || !specEl) return;
 
-  // Unpaired sources in left column
-  GROUPS.unpaired_sources.forEach(file => {
-    const el = document.getElementById('card-' + file.id);
-    if (!el) return;
-    el.style.left = leftX + 'px';
-    el.style.top = y + 'px';
-    y += el.offsetHeight + GAP;
-  });
+      sourceEl.style.left = leftX + 'px';
+      sourceEl.style.top = y + 'px';
+      specEl.style.left = rightX + 'px';
+      specEl.style.top = y + 'px';
 
-  // Unpaired specs in right column
-  let specY = y;
-  GROUPS.unpaired_specs.forEach(file => {
-    const el = document.getElementById('card-' + file.id);
-    if (!el) return;
-    el.style.left = rightX + 'px';
-    el.style.top = specY + 'px';
-    specY += el.offsetHeight + GAP;
+      y += Math.max(sourceEl.offsetHeight, specEl.offsetHeight) + GAP;
+    });
+
+    // Layout singles in this cluster
+    cluster.singles.forEach(file => {
+      const el = document.getElementById('card-' + file.id);
+      if (!el) return;
+      const col = file.type === 'spec' ? rightX : leftX;
+      el.style.left = col + 'px';
+      el.style.top = y + 'px';
+      y += el.offsetHeight + GAP;
+    });
+
+    // Extra gap between clusters
+    y += GAP / 2;
   });
 
   // Size the canvas
-  const maxY = Math.max(y, specY);
-  document.getElementById('canvasInner').style.minHeight = (maxY + 200) + 'px';
+  document.getElementById('canvasInner').style.minHeight = (y + 200) + 'px';
   document.getElementById('canvasInner').style.minWidth = (rightX + CARD_WIDTH + GAP) + 'px';
 
   // Show all cards
@@ -568,6 +719,131 @@ function layoutCards() {
   });
 
   storePositions();
+}
+
+function buildClusters() {
+  // Group paired files by source directory
+  const dirMap = new Map();
+
+  GROUPS.paired.forEach(([source, spec]) => {
+    const dir = source.dir || 'other';
+    if (!dirMap.has(dir)) dirMap.set(dir, { pairs: [], singles: [] });
+    dirMap.get(dir).pairs.push([source, spec]);
+  });
+
+  // Add unpaired sources to their directory cluster
+  GROUPS.unpaired_sources.forEach(file => {
+    const dir = file.dir || 'other';
+    if (!dirMap.has(dir)) dirMap.set(dir, { pairs: [], singles: [] });
+    dirMap.get(dir).singles.push(file);
+  });
+
+  // Add unpaired specs — try to match to an existing cluster by dir
+  GROUPS.unpaired_specs.forEach(file => {
+    const dir = file.dir || 'other';
+    // Spec dirs like "controllers/foo" might match source cluster
+    const matchedDir = Array.from(dirMap.keys()).find(d => dir.includes(d) || d.includes(dir));
+    const targetDir = matchedDir || dir;
+    if (!dirMap.has(targetDir)) dirMap.set(targetDir, { pairs: [], singles: [] });
+    dirMap.get(targetDir).singles.push(file);
+  });
+
+  // Convert to array with labels
+  return Array.from(dirMap.entries()).map(([dir, data]) => ({
+    label: formatClusterLabel(dir),
+    pairs: data.pairs,
+    singles: data.singles
+  }));
+}
+
+function formatClusterLabel(dir) {
+  // "controllers/team_projects" → "Controllers / Team Projects"
+  return dir.split('/').map(part =>
+    part.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  ).join(' / ');
+}
+
+function tidyLayout() {
+  layoutCards();
+  drawConnections();
+}
+
+function toggleAllDiffs() {
+  const allDiffs = document.querySelectorAll('.card-diff');
+  const anyOpen = Array.from(allDiffs).some(d => d.open);
+  allDiffs.forEach(d => { d.open = !anyOpen; });
+  setTimeout(() => { tidyLayout(); }, 50);
+}
+
+// Annotations (unified: LLM + user)
+function showAnnotationInput(btn) {
+  const area = btn.nextElementSibling;
+  area.style.display = 'block';
+  btn.style.display = 'none';
+  area.querySelector('.annotation-input').focus();
+}
+
+function cancelAnnotation(btn) {
+  const area = btn.closest('.annotation-input-area');
+  const addBtn = area.previousElementSibling;
+  area.querySelector('.annotation-input').value = '';
+  area.style.display = 'none';
+  addBtn.style.display = '';
+}
+
+function deleteAnnotation(btn) {
+  btn.closest('.annotation-item').remove();
+  updateQuestionCount();
+}
+
+function saveAnnotation(btn) {
+  const area = btn.closest('.annotation-input-area');
+  const input = area.querySelector('.annotation-input');
+  const typeSelect = area.querySelector('.annotation-type-select');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const annType = typeSelect.value;
+  const container = area.closest('.card-annotations');
+  const list = container.querySelector('.annotations-list');
+
+  const item = document.createElement('div');
+  item.className = 'annotation-item ' + annType;
+  item.setAttribute('data-annotation-type', annType);
+
+  const textSpan = document.createElement('span');
+  textSpan.className = 'annotation-text';
+  textSpan.contentEditable = 'true';
+  textSpan.textContent = text;
+  item.appendChild(textSpan);
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'annotation-delete';
+  deleteBtn.textContent = '\u00d7';
+  deleteBtn.onclick = () => { deleteAnnotation(deleteBtn); };
+  item.appendChild(deleteBtn);
+
+  list.appendChild(item);
+  input.value = '';
+  typeSelect.value = 'observation';
+  cancelAnnotation(btn);
+  updateQuestionCount();
+}
+
+function updateQuestionCount() {
+  const questions = document.querySelectorAll('.annotation-item.question');
+  const concerns = document.querySelectorAll('.annotation-item.concern');
+  const counter = document.getElementById('openQuestions');
+  const total = questions.length + concerns.length;
+  if (total > 0) {
+    const parts = [];
+    if (questions.length > 0) parts.push(questions.length + ' question' + (questions.length > 1 ? 's' : ''));
+    if (concerns.length > 0) parts.push(concerns.length + ' concern' + (concerns.length > 1 ? 's' : ''));
+    counter.textContent = parts.join(', ');
+    counter.style.display = '';
+  } else {
+    counter.style.display = 'none';
+  }
 }
 
 // Init
@@ -592,6 +868,7 @@ function toggleContext() {
 adjustCanvasTop();
 layoutCards();
 drawConnections();
+updateQuestionCount();
 window.addEventListener('resize', drawConnections);
 document.querySelectorAll('details').forEach(d => {
   d.addEventListener('toggle', () => setTimeout(drawConnections, 10));

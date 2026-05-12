@@ -118,26 +118,29 @@ The LLM enrichment step lives **outside** the tool, as an agent skill. The tool 
 
 ## Feature Ideas
 
-### Expandable inline diffs
-Click a card to see the actual diff hunks. Ideally rendered with difftastic if possible (it produces rich side-by-side output), otherwise fall back to standard +/- diff display. Hunks are already in the JSON.
+### ~~Expandable inline diffs~~ ✅
+Done. Click "View diff" on any card. Color-coded +/- lines, scrollable within the card.
 
-### Directory clustering
-Files in the same directory are usually related. Layout should cluster them spatially even without LLM-detected connections.
+### ~~Directory clustering~~ ✅
+Done. Cards are grouped by directory with cluster labels (e.g., "Controllers / Team Projects", "Services / Tasks").
 
-### Notes / annotations (editable)
-This is partly a note-taking tool. Users should be able to add their own notes to cards, and anything the LLM added should be editable. Notes persist in the HTML (localStorage or inline state).
+### ~~Notes / annotations (editable)~~ ✅
+Done. Each card has "+ Add note" button. Notes can be typed as Note, Question, or Concern. LLM-generated summaries, details, and annotations are also contenteditable.
 
-### Open questions in summary
-When a card has an open question annotation, surface it in the top-bar summary area. Quick way to see all unresolved questions across the review.
+### ~~Open questions in summary~~ ✅
+Done. Question and concern counts appear in the top bar. Updates live as notes are added/deleted.
 
-### Hunk headers on cards
-Extract `@@ ... @@ def method_name` context lines from hunks and show them on cards. Instant visibility into what parts of a file changed, no LLM needed.
+### ~~Hunk headers on cards~~ ✅
+Done. Merged into `details` field — parser extracts them, LLM can enrich/replace with better descriptions.
 
-### Change magnitude visualization
-Visual weight (border thickness, size, heat) based on line counts. Spot the core of a PR at a glance.
+### ~~Re-layout after resize~~ ✅
+Done. "Tidy Layout" button re-runs the layout algorithm.
 
-### Re-layout after resize
-After expanding diffs or other content that changes card size, provide a way to re-run the layout algorithm to untangle overlapping cards. Could be a button ("Tidy Layout") or automatic.
+### ~~Expand all diffs + re-layout~~ ✅
+Done. "Expand All Diffs" button toggles all diffs open/closed and triggers tidy layout.
 
-### Expand all diffs + re-layout
-Button to expand all diffs at once. Should trigger a re-layout afterward so expanded cards don't overlap. Depends on the re-layout feature.
+### Remaining ideas
+- Difftastic integration for richer diff display
+- localStorage persistence for notes and card positions
+- Minimap for large PRs
+- Connection line arrowheads for directionality

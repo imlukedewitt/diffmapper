@@ -51,4 +51,14 @@ RSpec.describe Diffmapper::Renderer do
     html_with_details = described_class.new(data).call
     expect(html_with_details).to include("new method")
   end
+
+  it "embeds grouped files with directory info for layout" do
+    expect(html).to include('"dir":"controllers/team_projects"')
+    expect(html).to include('"dir":"services/tasks"')
+  end
+
+  it "includes diff content in cards" do
+    expect(html).to include("View diff")
+    expect(html).to include("diff-content")
+  end
 end
