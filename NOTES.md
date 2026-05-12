@@ -115,3 +115,23 @@ The LLM enrichment step lives **outside** the tool, as an agent skill. The tool 
 ## Prototype
 
 `prototype-v1.html` — the original LLM-one-shot proof of concept that inspired this tool. Kept for reference.
+
+## Feature Ideas
+
+### Expandable inline diffs
+Click a card to see the actual diff hunks. Ideally rendered with difftastic if possible (it produces rich side-by-side output), otherwise fall back to standard +/- diff display. Hunks are already in the JSON.
+
+### Directory clustering
+Files in the same directory are usually related. Layout should cluster them spatially even without LLM-detected connections.
+
+### Notes / annotations (editable)
+This is partly a note-taking tool. Users should be able to add their own notes to cards, and anything the LLM added should be editable. Notes persist in the HTML (localStorage or inline state).
+
+### Open questions in summary
+When a card has an open question annotation, surface it in the top-bar summary area. Quick way to see all unresolved questions across the review.
+
+### Hunk headers on cards
+Extract `@@ ... @@ def method_name` context lines from hunks and show them on cards. Instant visibility into what parts of a file changed, no LLM needed.
+
+### Change magnitude visualization
+Visual weight (border thickness, size, heat) based on line counts. Spot the core of a PR at a glance.
