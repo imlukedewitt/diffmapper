@@ -4,4 +4,7 @@ source "https://rubygems.org"
 
 gemspec
 
-gem "rspec", "~> 3.12"
+gem "dry-initializer", "~> 3.1"
+gem "rspec", "~> 3.13"
+gem "rubocop", "~> 1.86"
+gem "rubocop-rspec", "~> 3.0"
