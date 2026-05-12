@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Add skip-completion-check option for team project archiving</title>
+<title>Diff Review</title>
 <style>
   :root {
     --bg: #1a1b26;
@@ -14,13 +14,13 @@
     --text-dim: #565f89;
     --text-bright: #e0e6ff;
     --green: #9ece6a;
-    --green-bg: rgba(158, 206, 106, 0.08);
+    --green-bg: #1e2718;
     --green-border: rgba(158, 206, 106, 0.5);
     --orange: #e0af68;
-    --orange-bg: rgba(224, 175, 104, 0.08);
+    --orange-bg: #2a2518;
     --orange-border: rgba(224, 175, 104, 0.5);
     --red: #f7768e;
-    --red-bg: rgba(247, 118, 142, 0.08);
+    --red-bg: #2a1a1e;
     --red-border: rgba(247, 118, 142, 0.5);
     --blue: #7aa2f7;
     --purple: #bb9af7;
@@ -216,6 +216,34 @@
   .annotation.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
   .annotation.concern { background: rgba(247,118,142,0.12); border-left: 2px solid var(--red); color: var(--red); }
 
+  .card-diff {
+    margin-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    padding-top: 6px;
+  }
+  .card-diff summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .card-diff summary:hover { color: var(--text); }
+  .diff-content {
+    margin-top: 6px;
+    padding: 8px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .diff-line-add { color: var(--green); }
+  .diff-line-del { color: var(--red); }
+  .diff-line-hunk { color: var(--blue); font-weight: 500; }
+  .diff-line-ctx { color: var(--text-dim); }
+
   .connections line {
     stroke: var(--connection-color);
     stroke-width: 1.5;
@@ -276,21 +304,19 @@
 <body>
 
 <div class="top-bar">
-  <h1>Add skip-completion-check option for team project archiving</h1>
+  <h1>Diff Review</h1>
   <div class="stats">
     <span class="additions">+149</span>
     <span class="deletions">-10</span>
     <span>13 files</span>
   </div>
-  <button class="context-toggle" onclick="toggleContext()" id="contextToggle">▸ Details</button>
   <div class="controls">
     <button onclick="resetLayout()">Reset Layout</button>
     <button onclick="toggleConnections()">Toggle Lines</button>
   </div>
 </div>
 
-<div class="context-bar" id="contextBar">
-  <div class="context-description">Backend adds a skip_completed_check flag threaded through the archive controller and team archiver service down to the per-task archiver. When enabled, incomplete subtasks are force-completed instead of blocking the archive. Frontend conditionally shows the checkbox for child projects only.</div>
+<div class="context-bar empty" id="contextBar">
 </div>
 
 <div class="canvas" id="canvas">
@@ -310,6 +336,20 @@
           <span class="add">+2</span>
           <span class="del">-1</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -83,7 +83,8 @@ class TeamProjects::ArchiveController &lt; ::TeamProjects::BaseController</span>
+<span class="diff-line-ctx">       preserve_attachments: boolean_value_of(archive_params[:preserve_attachments]),</span>
+<span class="diff-line-ctx">       notify_watchers:</span>
+<span class="diff-line-ctx">         boolean_value_of(archive_params[:notify_watchers]),</span>
+<span class="diff-line-del">-      include_subtasks: boolean_value_of(params[:include_subtasks])</span>
+<span class="diff-line-add">+      include_subtasks: boolean_value_of(params[:include_subtasks]),</span>
+<span class="diff-line-add">+      skip_completed_check: boolean_value_of(params[:skip_completed_check])</span>
+<span class="diff-line-ctx">     }</span>
+<span class="diff-line-ctx">   end</span>
+<span class="diff-line-ctx"> </span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -325,6 +365,18 @@
           <span class="add">+1</span>
           <span class="del">-0</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -92,6 +92,7 @@ class Tasks::BulkActionsController &lt; ApplicationController</span>
+<span class="diff-line-ctx">         team_project: @task.team_project,</span>
+<span class="diff-line-ctx">         archive: boolean_value_of(params[:archive]),</span>
+<span class="diff-line-ctx">         preserve_attachments: boolean_value_of(params[:preserve_attachments]),</span>
+<span class="diff-line-add">+        skip_completed_check: boolean_value_of(params[:skip_completed_check]),</span>
+<span class="diff-line-ctx">       )</span>
+<span class="diff-line-ctx">       Adapters::BulkActionsController::TeamArchiverAdapter.new(</span>
+<span class="diff-line-ctx">         service: service,</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -340,6 +392,24 @@
           <span class="add">+2</span>
           <span class="del">-0</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -10,6 +10,7 @@ module TeamProjects</span>
+<span class="diff-line-ctx">     attribute :preserve_attachments, Types::Params::Bool.default(false)</span>
+<span class="diff-line-ctx">     attribute :notify_watchers, Types::Params::Bool.default(true)</span>
+<span class="diff-line-add">+    attribute :skip_completed_check, Types::Params::Bool.default(false)</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-ctx">     def call</span>
+<span class="diff-line-ctx">       result = process_parent_project</span>
+<span class="diff-line-hunk">@@ -42,6 +43,7 @@ module TeamProjects</span>
+<span class="diff-line-ctx">           archive: true,</span>
+<span class="diff-line-ctx">           preserve_attachments: preserve_attachments,</span>
+<span class="diff-line-add">+          skip_completed_check: skip_completed_check,</span>
+<span class="diff-line-ctx">         )</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -355,6 +425,42 @@
           <span class="add">+17</span>
           <span class="del">-1</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -8,7 +8,7 @@ module Tasks</span>
+<span class="diff-line-ctx">     attribute :task, Types.Instance(Task)</span>
+<span class="diff-line-ctx">     attribute :archive, Types::Params::Bool.default(false)</span>
+<span class="diff-line-ctx">     attribute :preserve_attachments, Types::Params::Bool.default(false)</span>
+<span class="diff-line-del">-</span>
+<span class="diff-line-add">+    attribute :skip_completed_check, Types::Params::Bool.default(false)</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-ctx">     def call</span>
+<span class="diff-line-ctx">       return failure(&quot;Task cannot be archived&quot;) unless task.archivable?</span>
+<span class="diff-line-hunk">@@ -30,6 +31,22 @@ module Tasks</span>
+<span class="diff-line-ctx">         task.update!(status: :archived, archived_at: Time.current)</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-add">+      def maybe_skip_validation</span>
+<span class="diff-line-add">+        return unless skip_completed_check</span>
+<span class="diff-line-add">+        return unless incomplete_subtasks?</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        task.subtasks.incomplete.each do |subtask|</span>
+<span class="diff-line-add">+          subtask.force_complete!</span>
+<span class="diff-line-add">+        end</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      def incomplete_subtasks?</span>
+<span class="diff-line-add">+        return false if task.team_project.blank?</span>
+<span class="diff-line-add">+        return false if task.standalone?</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        task.subtasks.incomplete.exists?</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-ctx">       def process_archive</span>
+<span class="diff-line-ctx">         ActiveRecord::Base.transaction do</span>
+<span class="diff-line-ctx">           validate_task!</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -370,6 +476,20 @@
           <span class="add">+3</span>
           <span class="del">-0</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -15,6 +15,9 @@ const ArchiveTimeline = ({ project, options, onUpdate }) =&gt; {</span>
+<span class="diff-line-ctx">   const [selectedDate, setSelectedDate] = useState(null);</span>
+<span class="diff-line-ctx">   const [showOptions, setShowOptions] = useState(false);</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-add">+  const isParentProject = project.id === project.teamProjectParentId;</span>
+<span class="diff-line-add">+  const showSkipCheck = !isParentProject &amp;&amp; options.hasIncompleteSubtasks;</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-ctx">   return (</span>
+<span class="diff-line-ctx">     &lt;div className=&quot;archive-timeline&quot;&gt;</span>
+<span class="diff-line-ctx">       &lt;TimelineSelector</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -385,6 +505,41 @@
           <span class="add">+16</span>
           <span class="del">-1</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -1,7 +1,7 @@</span>
+<span class="diff-line-ctx"> import React from &#39;react&#39;;</span>
+<span class="diff-line-ctx"> import PropTypes from &#39;prop-types&#39;;</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-del">-const ArchiveOptions = ({ options, onChange }) =&gt; {</span>
+<span class="diff-line-add">+const ArchiveOptions = ({ options, onChange, showSkipCheck }) =&gt; {</span>
+<span class="diff-line-ctx">   return (</span>
+<span class="diff-line-ctx">     &lt;div className=&quot;archive-options&quot;&gt;</span>
+<span class="diff-line-ctx">       &lt;label&gt;</span>
+<span class="diff-line-hunk">@@ -18,6 +18,19 @@ const ArchiveOptions = ({ options, onChange }) =&gt; {</span>
+<span class="diff-line-ctx">           Preserve attachments</span>
+<span class="diff-line-ctx">         &lt;/label&gt;</span>
+<span class="diff-line-ctx">       &lt;/div&gt;</span>
+<span class="diff-line-add">+      {showSkipCheck &amp;&amp; (</span>
+<span class="diff-line-add">+        &lt;div className=&quot;option-group&quot;&gt;</span>
+<span class="diff-line-add">+          &lt;label&gt;</span>
+<span class="diff-line-add">+            &lt;input</span>
+<span class="diff-line-add">+              type=&quot;checkbox&quot;</span>
+<span class="diff-line-add">+              checked={options.skipCompletedCheck}</span>
+<span class="diff-line-add">+              onChange={(e) =&gt; onChange({</span>
+<span class="diff-line-add">+                ...options,</span>
+<span class="diff-line-add">+                skipCompletedCheck: e.target.checked,</span>
+<span class="diff-line-add">+              })}</span>
+<span class="diff-line-add">+            /&gt;</span>
+<span class="diff-line-add">+            Skip completion check</span>
+<span class="diff-line-add">+          &lt;/label&gt;</span>
+<span class="diff-line-add">+        &lt;/div&gt;</span>
+<span class="diff-line-add">+      )}</span>
+<span class="diff-line-ctx">     &lt;/div&gt;</span>
+<span class="diff-line-ctx">   );</span>
+<span class="diff-line-ctx"> };</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -400,6 +555,18 @@
           <span class="add">+1</span>
           <span class="del">-0</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -45,6 +45,7 @@ const ProjectArchive = ({ project }) =&gt; {</span>
+<span class="diff-line-ctx">           &lt;ArchiveOptions</span>
+<span class="diff-line-ctx">             options={archiveOptions}</span>
+<span class="diff-line-ctx">             onChange={setArchiveOptions}</span>
+<span class="diff-line-add">+            showSkipCheck={showSkipCheck}</span>
+<span class="diff-line-ctx">           /&gt;</span>
+<span class="diff-line-ctx">         )}</span>
+<span class="diff-line-ctx">       &lt;/div&gt;</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -415,6 +582,22 @@
           <span class="add">+3</span>
           <span class="del">-1</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -120,8 +120,10 @@ RSpec.describe TeamProjects::ArchiveController do</span>
+<span class="diff-line-ctx">           expect(service_params).to include(</span>
+<span class="diff-line-ctx">             preserve_attachments: false,</span>
+<span class="diff-line-ctx">             notify_watchers: true,</span>
+<span class="diff-line-del">-            include_subtasks: true</span>
+<span class="diff-line-add">+            include_subtasks: true,</span>
+<span class="diff-line-add">+            skip_completed_check: false</span>
+<span class="diff-line-ctx">           )</span>
+<span class="diff-line-add">+          expect(service_params).to have_key(:skip_completed_check)</span>
+<span class="diff-line-ctx">         end</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -430,6 +613,19 @@
           <span class="add">+2</span>
           <span class="del">-0</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -85,6 +85,8 @@ RSpec.describe Tasks::BulkActionsController do</span>
+<span class="diff-line-ctx">           service = instance_double(Tasks::Archiver)</span>
+<span class="diff-line-ctx">           expect(Tasks::Archiver).to receive(:new).with(</span>
+<span class="diff-line-ctx">             hash_including(</span>
+<span class="diff-line-add">+              archive: true,</span>
+<span class="diff-line-add">+              skip_completed_check: false,</span>
+<span class="diff-line-ctx">             )</span>
+<span class="diff-line-ctx">           ).and_return(service)</span>
+<span class="diff-line-ctx">         end</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -445,6 +641,49 @@
           <span class="add">+34</span>
           <span class="del">-0</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -45,6 +45,37 @@ RSpec.describe &quot;Archiving a team project&quot;, type: :feature do</span>
+<span class="diff-line-ctx">       expect(page).to have_content(&quot;Project archived successfully&quot;)</span>
+<span class="diff-line-ctx">     end</span>
+<span class="diff-line-ctx">   end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+  context &quot;when the project is a child of a team project&quot; do</span>
+<span class="diff-line-add">+    let(:project) { create(:project, :child, team_project: team_project) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    it &quot;shows the skip check option&quot; do</span>
+<span class="diff-line-add">+      visit archive_path(project)</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      expect(page).to have_content(&quot;Skip completion check&quot;)</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    it &quot;hides the skip check option for parent projects&quot; do</span>
+<span class="diff-line-add">+      parent = create(:project, :parent, team_project: team_project)</span>
+<span class="diff-line-add">+      visit archive_path(parent)</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      expect(page).not_to have_content(&quot;Skip completion check&quot;)</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    it &quot;skips check when selected&quot; do</span>
+<span class="diff-line-add">+      visit archive_path(project)</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      check &quot;Skip completion check&quot;</span>
+<span class="diff-line-add">+      click_button &quot;Archive Project&quot;</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      expect(page).to have_content(&quot;Project archived successfully&quot;)</span>
+<span class="diff-line-add">+      expect(project.reload.subtasks).to all(</span>
+<span class="diff-line-add">+        have_attributes(force_completed: true)</span>
+<span class="diff-line-add">+      )</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    it &quot;does not skip check by default&quot; do</span>
+<span class="diff-line-add">+      visit archive_path(project)</span>
+<span class="diff-line-add">+      expect(find_field(&quot;Skip completion check&quot;)).not_to be_checked</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+  end</span>
+<span class="diff-line-ctx"> end</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -460,6 +699,40 @@
           <span class="add">+6</span>
           <span class="del">-6</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -30,14 +30,14 @@ RSpec.describe &quot;Team Project Archive via API with Confirmation&quot; do</span>
+<span class="diff-line-ctx">       it &quot;initiates the archive with confirmation&quot; do</span>
+<span class="diff-line-ctx">         post api_v1_team_project_archive_path(team_project),</span>
+<span class="diff-line-ctx">           params: {</span>
+<span class="diff-line-del">-            archive: true,</span>
+<span class="diff-line-del">-            preserve_attachments: true</span>
+<span class="diff-line-add">+            archive: &quot;true&quot;,</span>
+<span class="diff-line-add">+            preserve_attachments: &quot;true&quot;,</span>
+<span class="diff-line-add">+            skip_completed_check: &quot;false&quot;</span>
+<span class="diff-line-ctx">           },</span>
+<span class="diff-line-ctx">           headers: api_headers</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-ctx">         expect(response).to have_http_status(:ok)</span>
+<span class="diff-line-del">-        expect(json_response[&quot;confirmation_token&quot;]).to be_present</span>
+<span class="diff-line-del">-        expect(json_response[&quot;status&quot;]).to eq(&quot;pending_confirmation&quot;)</span>
+<span class="diff-line-add">+        expect(json_response).to include(&quot;confirmation_token&quot;, &quot;status&quot;)</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-hunk">@@ -50,8 +50,8 @@ RSpec.describe &quot;Team Project Archive via API with Confirmation&quot; do</span>
+<span class="diff-line-ctx">       it &quot;completes the archive&quot; do</span>
+<span class="diff-line-ctx">         post complete_api_v1_team_project_archive_path(team_project),</span>
+<span class="diff-line-ctx">           params: {</span>
+<span class="diff-line-del">-            confirmation_token: &quot;tok_confirm_123&quot;,</span>
+<span class="diff-line-del">-            confirmed_by: &quot;user_abc123&quot;</span>
+<span class="diff-line-add">+            confirmation_token: &quot;tok_test_confirm&quot;,</span>
+<span class="diff-line-add">+            confirmed_by: &quot;user_test_123&quot;</span>
+<span class="diff-line-ctx">           },</span>
+<span class="diff-line-ctx">           headers: api_headers</span>
+<span class="diff-line-ctx"> </span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -475,6 +748,37 @@
           <span class="add">+21</span>
           <span class="del">-0</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -55,6 +55,26 @@ RSpec.describe TeamProjects::TeamArchiver do</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-add">+    context &quot;when skip_completed_check is true&quot; do</span>
+<span class="diff-line-add">+      let(:params) { default_params.merge(skip_completed_check: true) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      it &quot;passes skip_completed_check to member archives&quot; do</span>
+<span class="diff-line-add">+        result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        expect(result).to be_success</span>
+<span class="diff-line-add">+        expect(child_project.reload.force_completed?).to be true</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    context &quot;when skip_completed_check is false&quot; do</span>
+<span class="diff-line-add">+      let(:params) { default_params.merge(skip_completed_check: false) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      it &quot;does not skip validation for members&quot; do</span>
+<span class="diff-line-add">+        result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        expect(result).to be_success</span>
+<span class="diff-line-add">+        expect(child_project.reload.force_completed?).to be false</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-ctx">   end</span>
+<span class="diff-line-ctx"> end</span>
+</pre>
+        </details>
       </div>
     </div>
     <div class="card modified"
@@ -490,6 +794,57 @@
           <span class="add">+41</span>
           <span class="del">-0</span>
         </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -80,6 +80,43 @@ RSpec.describe Tasks::Archiver do</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-add">+    context &quot;with skip_completed_check&quot; do</span>
+<span class="diff-line-add">+      let(:task) { create(:task, :child, team_project: team_project) }</span>
+<span class="diff-line-add">+      let(:product) { create(:product, :allows_skip_check) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      context &quot;when true and eligible&quot; do</span>
+<span class="diff-line-add">+        let(:params) { default_params.merge(skip_completed_check: true) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        it &quot;force completes incomplete subtasks&quot; do</span>
+<span class="diff-line-add">+          result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+          expect(result).to be_success</span>
+<span class="diff-line-add">+          expect(task.reload.subtasks).to all(</span>
+<span class="diff-line-add">+            have_attributes(force_completed: true)</span>
+<span class="diff-line-add">+          )</span>
+<span class="diff-line-add">+        end</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      context &quot;when true but not eligible (parent task)&quot; do</span>
+<span class="diff-line-add">+        let(:task) { create(:task, :parent, team_project: team_project) }</span>
+<span class="diff-line-add">+        let(:params) { default_params.merge(skip_completed_check: true) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        it &quot;does not force complete&quot; do</span>
+<span class="diff-line-add">+          result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+          expect(result).to be_success</span>
+<span class="diff-line-add">+          expect(task.reload.subtasks).to all(</span>
+<span class="diff-line-add">+            have_attributes(force_completed: false)</span>
+<span class="diff-line-add">+          )</span>
+<span class="diff-line-add">+        end</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      context &quot;when false&quot; do</span>
+<span class="diff-line-add">+        let(:params) { default_params.merge(skip_completed_check: false) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        it &quot;does not force complete&quot; do</span>
+<span class="diff-line-add">+          result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+          expect(result).to be_success</span>
+<span class="diff-line-add">+        end</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-ctx">   end</span>
+<span class="diff-line-ctx"> end</span>
+</pre>
+        </details>
       </div>
     </div>
   </div>
@@ -511,10 +866,12 @@ const GAP = 40;
 const PAIR_GAP = 60;
 
 // Drag & drop
-let dragCard = null, dragOffsetX = 0, dragOffsetY = 0;
+let dragCard = null, dragOffsetX = 0, dragOffsetY = 0, topZ = 10;
 
 document.querySelectorAll('.card').forEach(card => {
   card.addEventListener('mousedown', (e) => {
+    topZ++;
+    card.style.zIndex = topZ;
     if (['SUMMARY','BUTTON','TEXTAREA','INPUT'].includes(e.target.tagName)) return;
     dragCard = card;
     dragCard.classList.add('dragging');
@@ -522,7 +879,6 @@ document.querySelectorAll('.card').forEach(card => {
     const canvas = document.getElementById('canvas');
     dragOffsetX = e.clientX - rect.left + canvas.getBoundingClientRect().left - 30 + canvas.scrollLeft;
     dragOffsetY = e.clientY - rect.top + canvas.getBoundingClientRect().top - 30 + canvas.scrollTop;
-    card.style.zIndex = 50;
   });
 });
 
@@ -537,7 +893,8 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', () => {
   if (dragCard) {
     dragCard.classList.remove('dragging');
-    dragCard.style.zIndex = 10;
+    topZ++;
+    dragCard.style.zIndex = topZ;
     dragCard = null;
   }
 });
