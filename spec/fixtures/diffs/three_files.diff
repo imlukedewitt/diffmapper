@@ -1,0 +1,34 @@
+diff --git a/app/models/user.rb b/app/models/user.rb
+index abc1234..def5678 100644
+--- a/app/models/user.rb
++++ b/app/models/user.rb
+@@ -10,7 +10,9 @@ class User < ApplicationRecord
+   validates :email, presence: true
+ 
+-  def full_name
++  def display_name
++    return username if first_name.blank?
++
+     "#{first_name} #{last_name}"
+   end
+ end
+diff --git a/app/services/notifier.rb b/app/services/notifier.rb
+new file mode 100644
+index 0000000..abc1234
+--- /dev/null
++++ b/app/services/notifier.rb
+@@ -0,0 +1,5 @@
++class Notifier
++  def call(user)
++    UserMailer.welcome(user).deliver_later
++  end
++end
+diff --git a/app/models/legacy.rb b/app/models/legacy.rb
+deleted file mode 100644
+index abc1234..0000000
+--- a/app/models/legacy.rb
++++ /dev/null
+@@ -1,3 +0,0 @@
+-class Legacy < ApplicationRecord
+-  # deprecated
+-end
