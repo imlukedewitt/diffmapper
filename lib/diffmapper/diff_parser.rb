@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "file_classifier"
+
 module Diffmapper
   class DiffParser
     extend Dry::Initializer
@@ -38,6 +40,7 @@ module Diffmapper
         id: id_from_path(path),
         path: path,
         status: detect_status(chunk),
+        type: FileClassifier.classify(path),
         additions: additions,
         deletions: deletions,
         hunks: extract_hunks(chunk)
