@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PR Review: Add Remove Option for Unused Meters</title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #24283b;
+    --surface-hover: #292e42;
+    --border: #414868;
+    --text: #c0caf5;
+    --text-dim: #565f89;
+    --text-bright: #e0e6ff;
+    --green: #9ece6a;
+    --green-bg: rgba(158, 206, 106, 0.08);
+    --green-border: rgba(158, 206, 106, 0.5);
+    --orange: #e0af68;
+    --orange-bg: rgba(224, 175, 104, 0.08);
+    --orange-border: rgba(224, 175, 104, 0.5);
+    --red: #f7768e;
+    --red-bg: rgba(247, 118, 142, 0.08);
+    --red-border: rgba(247, 118, 142, 0.5);
+    --blue: #7aa2f7;
+    --purple: #bb9af7;
+    --cyan: #7dcfff;
+    --connection-color: #414868;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* Top bar */
+  .top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .top-bar h1 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+
+  .top-bar .stats {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .top-bar .stats span {
+    margin-right: 12px;
+  }
+
+  .top-bar .stats .new { color: var(--green); }
+  .top-bar .stats .modified { color: var(--orange); }
+  .top-bar .stats .deleted { color: var(--red); }
+
+  .top-bar .controls {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+  }
+
+  .top-bar button {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .top-bar button:hover {
+    background: var(--border);
+  }
+
+  /* Canvas */
+  .canvas {
+    position: absolute;
+    top: 46px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: auto;
+  }
+
+  .canvas-inner {
+    position: relative;
+    min-width: 3000px;
+    min-height: 2400px;
+    padding: 30px;
+  }
+
+  /* SVG connections layer */
+  .connections {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .connections line {
+    stroke: var(--connection-color);
+    stroke-width: 1.5;
+    stroke-dasharray: 6, 4;
+  }
+
+  .connections .conn-label {
+    font-size: 10px;
+    fill: var(--text-dim);
+    font-family: inherit;
+  }
+
+  /* Cards */
+  .card {
+    position: absolute;
+    width: 340px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    z-index: 10;
+    cursor: grab;
+    user-select: none;
+    transition: box-shadow 0.15s;
+  }
+
+  .card:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+
+  .card.dragging {
+    cursor: grabbing;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    z-index: 50;
+    opacity: 0.95;
+  }
+
+  .card.new { border-color: var(--green-border); background: var(--green-bg); }
+  .card.modified { border-color: var(--orange-border); background: var(--orange-bg); }
+  .card.deleted { border-color: var(--red-border); background: var(--red-bg); }
+  .card.context { border-color: rgba(122, 162, 247, 0.5); background: rgba(122, 162, 247, 0.08); width: 400px; }
+
+  .card-header {
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .card-header .file-badge {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .badge-model { background: rgba(187, 154, 247, 0.2); color: var(--purple); }
+  .badge-controller { background: rgba(122, 162, 247, 0.2); color: var(--blue); }
+  .badge-serializer { background: rgba(125, 207, 255, 0.2); color: var(--cyan); }
+  .badge-config { background: rgba(224, 175, 104, 0.2); color: var(--orange); }
+  .badge-component { background: rgba(158, 206, 106, 0.2); color: var(--green); }
+  .badge-styles { background: rgba(187, 154, 247, 0.15); color: #c4a7f7; }
+  .badge-spec { background: rgba(247, 118, 142, 0.2); color: var(--red); }
+  .badge-context { background: rgba(122, 162, 247, 0.2); color: var(--blue); }
+
+  .card-header .filename {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-bright);
+    word-break: break-all;
+    line-height: 1.4;
+  }
+
+  .card-header .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+
+  .status-dot.new { background: var(--green); }
+  .status-dot.modified { background: var(--orange); }
+
+  .card-body {
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .card-body ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .card-body li {
+    padding: 2px 0;
+    padding-left: 14px;
+    position: relative;
+  }
+
+  .card-body li::before {
+    content: '›';
+    position: absolute;
+    left: 2px;
+    color: var(--text-dim);
+  }
+
+  .card-body .method-detail {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    border-left: 2px solid var(--border);
+  }
+
+  .card-body .method-detail summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+
+  .card-body .method-detail summary:hover {
+    color: var(--text);
+  }
+
+  .card-body .method-detail .detail-content {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .card-body .annotation {
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: text;
+  }
+
+  .annotation.question {
+    background: rgba(122, 162, 247, 0.12);
+    border-left: 2px solid var(--blue);
+    color: var(--blue);
+  }
+
+  .annotation.observation {
+    background: rgba(158, 206, 106, 0.12);
+    border-left: 2px solid var(--green);
+    color: var(--green);
+  }
+
+  .annotation.concern {
+    background: rgba(247, 118, 142, 0.12);
+    border-left: 2px solid var(--red);
+    color: var(--red);
+  }
+
+  /* Group labels */
+  .group-label {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* Expand/collapse for complex cards */
+  .expandable-section {
+    border-top: 1px solid rgba(255,255,255,0.05);
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .expandable-section summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+    padding: 2px 0;
+  }
+
+  .expandable-section summary:hover {
+    color: var(--text);
+  }
+
+  .expand-content {
+    margin-top: 4px;
+  }
+
+  /* Add note button */
+  .add-note {
+    margin-top: 6px;
+    padding: 3px 8px;
+    font-size: 10px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    width: 100%;
+    text-align: left;
+  }
+
+  .add-note:hover {
+    border-color: var(--text-dim);
+    color: var(--text);
+  }
+
+  .note-input {
+    width: 100%;
+    margin-top: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 32px;
+  }
+
+  .note-input:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  .flow-arrow {
+    font-size: 10px;
+    color: var(--text-dim);
+    position: absolute;
+    z-index: 6;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  /* Legend */
+  .legend {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 100;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 11px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 3px 0;
+  }
+
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>PR Review: Add Remove Option for Unused Meters</h1>
+  <div class="stats">
+    <span class="new">+2 new</span>
+    <span class="modified">10 modified</span>
+    <span>| 12 files | +424 −12</span>
+  </div>
+  <div class="controls">
+    <button onclick="resetLayout()">Reset Layout</button>
+    <button onclick="toggleConnections()">Toggle Lines</button>
+  </div>
+</div>
+
+<div class="canvas" id="canvas">
+  <div class="canvas-inner" id="canvasInner">
+
+    <!-- SVG connection lines -->
+    <svg class="connections" id="connections"></svg>
+
+    <!-- ==================== CONTEXT CARD ==================== -->
+    <div class="card context" id="card-context" style="left: 40px; top: 30px;">
+      <div class="card-header">
+        <span class="file-badge badge-context">Summary</span>
+        <span class="filename">Add Remove Option for Unused Meters</span>
+      </div>
+      <div class="card-body">
+        <p style="margin-bottom: 8px;">Adds ability to delete meters that aren't attached to any component, meter field, or formula meter. Gated by a <code>can_destroy?</code> check on the model, exposed through the serializer so the frontend can conditionally show the remove option.</p>
+        <p style="font-size: 11px; color: var(--text-dim);">Branch: <code>codex/add-remove-option-for-unused-meters</code></p>
+        <details class="expandable-section">
+          <summary>Flow Overview</summary>
+          <div class="expand-content" style="font-size: 11px;">
+            <ul>
+              <li><strong>Backend:</strong> routes → controller#destroy → model#can_destroy? / check_destroyable</li>
+              <li><strong>API:</strong> serializer exposes <code>can_destroy</code> boolean</li>
+              <li><strong>Frontend:</strong> MetersTab → PinotDashboard → MeterChart (prop drilling <code>onMeterRemoved</code>)</li>
+              <li>MeterChart calls <code>DELETE /metering/streams/:uid/meters/:id</code></li>
+            </ul>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- ==================== GROUP: BACKEND ==================== -->
+    <div class="group-label" style="left: 40px; top: 230px;">▸ Backend</div>
+
+    <!-- routes.rb -->
+    <div class="card modified" id="card-routes" style="left: 40px; top: 260px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-config">config</span>
+        <span class="filename">config/routes.rb</span>
+      </div>
+      <div class="card-body">
+        <ul>
+          <li>Add <code>:destroy</code> to <code>resources :meters</code> under <code>metering/streams</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- meters_controller.rb -->
+    <div class="card modified" id="card-controller" style="left: 420px; top: 260px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-controller">controller</span>
+        <span class="filename">app/controllers/metering/meters_controller.rb</span>
+      </div>
+      <div class="card-body">
+        <ul>
+          <li>Add <code>:destroy</code> to <code>restrict_actions</code> and <code>skip_before_action</code></li>
+        </ul>
+        <details class="method-detail">
+          <summary>destroy action</summary>
+          <div class="detail-content">
+            Calls <code>meter.destroy</code> → returns <code>:no_content</code> on success, <code>:unprocessable_entity</code> with errors on failure. Simple and clean.
+          </div>
+        </details>
+        <details class="method-detail">
+          <summary>meter finder (private)</summary>
+          <div class="detail-content">
+            New private method. If <code>stream_uid</code> param present, finds through <code>stream.meters</code>; otherwise falls back to <code>@site.metering_meters</code>. Supports both nested and top-level routes.
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- meter.rb (model) -->
+    <div class="card modified" id="card-model" style="left: 800px; top: 260px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-model">model</span>
+        <span class="filename">app/models/metering/meter.rb</span>
+      </div>
+      <div class="card-body">
+        <details class="method-detail" open>
+          <summary>can_destroy? (new public method)</summary>
+          <div class="detail-content">
+            Returns true only when meter has NO:<br>
+            • <code>attached_meters</code><br>
+            • <code>components</code><br>
+            • <code>meter_fields</code><br>
+            • <code>formula_meter_memberships</code><br>
+            Uses <code>.exists?</code> — avoids loading records.
+          </div>
+        </details>
+        <details class="method-detail">
+          <summary>check_destroyable (updated callback)</summary>
+          <div class="detail-content">
+            Was: only checked <code>components.none?</code><br>
+            Now: delegates to <code>can_destroy?</code> for full check.<br>
+            Error message changed to generic "currently in use" instead of component-specific.
+          </div>
+        </details>
+        <details class="method-detail">
+          <summary>formula_meter_memberships (new private)</summary>
+          <div class="detail-content">
+            <code>AttachedMeter.where(scope_type: "Metering::FormulaMeter", meter_id: id)</code><br>
+            Queries the polymorphic <code>attached_meters</code> table for formula meter references.
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- serializer -->
+    <div class="card modified" id="card-serializer" style="left: 1180px; top: 260px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-serializer">serializer</span>
+        <span class="filename">app/serializers/api/v1/metering/meter_serializer.rb</span>
+      </div>
+      <div class="card-body">
+        <ul>
+          <li>Add <code>:can_destroy</code> to serialized attributes</li>
+          <li>Delegates to <code>object.can_destroy?</code></li>
+          <li>rubocop disable for <code>Naming/PredicateMethod</code> — AMS requires non-<code>?</code> method name matching the attribute key</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ==================== GROUP: FRONTEND ==================== -->
+    <div class="group-label" style="left: 40px; top: 580px;">▸ Frontend Components</div>
+
+    <!-- MetersTab.js -->
+    <div class="card modified" id="card-meterstab" style="left: 40px; top: 610px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-component">component</span>
+        <span class="filename">MetersTab/MetersTab.js</span>
+      </div>
+      <div class="card-body">
+        <details class="method-detail" open>
+          <summary>handleMeterRemoved (new callback)</summary>
+          <div class="detail-content">
+            <code>useCallback</code> — filters the removed meter out of <code>meterGroups</code> state, then removes any groups that become empty. Passed down as <code>onMeterRemoved</code> prop to PinotDashboard.
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- PinotDashboard.js -->
+    <div class="card modified" id="card-pinot" style="left: 420px; top: 610px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-component">component</span>
+        <span class="filename">PinotDashboard/PinotDashboard.js</span>
+      </div>
+      <div class="card-body">
+        <ul>
+          <li>Pass-through: accepts <code>onMeterRemoved</code> prop, forwards it to each <code>MeterChart</code></li>
+          <li>Adds PropTypes + defaultProps</li>
+        </ul>
+        <div class="annotation observation">🟩 Pure prop pass-through — no logic added here</div>
+      </div>
+    </div>
+
+    <!-- MeterChart.js -->
+    <div class="card modified" id="card-meterchart" style="left: 800px; top: 560px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-component">component</span>
+        <span class="filename">MeterChart/MeterChart.js</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">Most complex frontend change (+90 lines)</p>
+        <details class="method-detail" open>
+          <summary>Dropdown menu (UI)</summary>
+          <div class="detail-content">
+            Replaces no-op ellipsis button with a <code>UIPopdown</code> dropdown.<br>
+            Menu only opens if <code>meter.canDestroy</code> is true.<br>
+            Single menu item: "Remove Meter".
+          </div>
+        </details>
+        <details class="method-detail">
+          <summary>handleRemoveMeter (async)</summary>
+          <div class="detail-content">
+            1. Closes menu<br>
+            2. <code>window.confirm()</code> guard<br>
+            3. <code>DELETE /metering/streams/:uid/meters/:id</code><br>
+            4. On success: calls <code>onMeterRemoved(meter)</code><br>
+            5. On failure: sets error from server response
+          </div>
+        </details>
+        <details class="method-detail">
+          <summary>Event handlers</summary>
+          <div class="detail-content">
+            <code>handleTriggerClick</code> — toggles menu, respects canDestroy gate<br>
+            <code>handleTriggerKeyDown</code> — stopPropagation only<br>
+            <code>handleRemoveClick / handleRemoveKeyDown</code> — delegates to handleRemoveMeter with keyboard support
+          </div>
+        </details>
+        <details class="method-detail">
+          <summary>Accessibility</summary>
+          <div class="detail-content">
+            <code>aria-label="Meter actions"</code>, <code>aria-haspopup</code>, <code>role="menu"</code> / <code>role="menuitem"</code>, <code>tabIndex={0}</code>, keyboard Enter/Space handling
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- MeterChart.styles.js -->
+    <div class="card modified" id="card-styles" style="left: 1180px; top: 610px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-styles">styles</span>
+        <span class="filename">MeterChart/MeterChart.styles.js</span>
+      </div>
+      <div class="card-body">
+        <ul>
+          <li>New styled components: <code>DropdownMenu</code> + <code>DropdownMenuItem</code></li>
+          <li>Standard dropdown styling with hover/focus-visible states</li>
+          <li>Uses CSS custom properties for theming consistency</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ==================== GROUP: SPECS ==================== -->
+    <div class="group-label" style="left: 40px; top: 910px;">▸ Backend Specs</div>
+
+    <!-- controller spec -->
+    <div class="card modified" id="card-ctrl-spec" style="left: 40px; top: 940px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-spec">spec</span>
+        <span class="filename">spec/controllers/metering/meters_controller_spec.rb</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size: 11px; color: var(--text-dim); margin-bottom: 4px;">+75 lines — thorough coverage</p>
+        <ul>
+          <li>Add <code>:destroy</code> to restrict_actions test</li>
+        </ul>
+        <details class="expandable-section" open>
+          <summary>DELETE #destroy tests (6)</summary>
+          <div class="expand-content">
+            <ul>
+              <li>✓ Destroys unused meter via nested stream route</li>
+              <li>✓ Destroys unused meter via top-level route</li>
+              <li>✓ 404 when meter belongs to another site</li>
+              <li>✓ 422 when attached to component</li>
+              <li>✓ 422 when attached to meter field</li>
+              <li>✓ 422 when used inside formula meter</li>
+            </ul>
+          </div>
+        </details>
+        <div class="annotation observation">🟩 Good coverage — tests both route variants and all three "in use" scenarios that block deletion</div>
+      </div>
+    </div>
+
+    <!-- serializer spec -->
+    <div class="card modified" id="card-ser-spec" style="left: 420px; top: 940px;">
+      <div class="card-header">
+        <span class="status-dot modified"></span>
+        <span class="file-badge badge-spec">spec</span>
+        <span class="filename">spec/serializers/api/v1/metering/meter_serializer_spec.rb</span>
+      </div>
+      <div class="card-body">
+        <ul>
+          <li>Asserts <code>can_destroy: true</code> for unused meter</li>
+          <li>New test: <code>can_destroy: false</code> when attached to meter field</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ==================== GROUP: FRONTEND SPECS ==================== -->
+    <div class="group-label" style="left: 800px; top: 910px;">▸ Frontend Specs</div>
+
+    <!-- MetersTab.test.js -->
+    <div class="card new" id="card-meterstab-test" style="left: 800px; top: 940px;">
+      <div class="card-header">
+        <span class="status-dot new"></span>
+        <span class="file-badge badge-spec">spec</span>
+        <span class="filename">MetersTab/MetersTab.test.js</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size: 11px; color: var(--green); margin-bottom: 4px;">New file — 72 lines</p>
+        <ul>
+          <li>Mocks API, shared components, stream context, PinotDashboard</li>
+          <li>Tests: removed meter card disappears from UI after <code>onMeterRemoved</code> callback</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- MeterChart.test.js -->
+    <div class="card new" id="card-meterchart-test" style="left: 1180px; top: 940px;">
+      <div class="card-header">
+        <span class="status-dot new"></span>
+        <span class="file-badge badge-spec">spec</span>
+        <span class="filename">MeterChart/MeterChart.test.js</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size: 11px; color: var(--green); margin-bottom: 4px;">New file — 99 lines</p>
+        <ul>
+          <li>Mocks API, chart lib, UI components, UIPopdown</li>
+        </ul>
+        <details class="expandable-section" open>
+          <summary>Tests (3)</summary>
+          <div class="expand-content">
+            <ul>
+              <li>✓ Shows "Remove Meter" for unused meters (<code>canDestroy: true</code>)</li>
+              <li>✓ Hides menu for used meters (<code>canDestroy: false</code>)</li>
+              <li>✓ DELETE call + <code>onMeterRemoved</code> callback on confirm</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background: var(--green);"></div> New file</div>
+  <div class="legend-item"><div class="legend-dot" style="background: var(--orange);"></div> Modified</div>
+  <div class="legend-item"><div class="legend-dot" style="background: var(--red);"></div> Deleted</div>
+  <div style="border-top: 1px solid var(--border); margin: 6px 0;"></div>
+  <div style="font-size: 10px; color: var(--text-dim);">Drag cards to rearrange</div>
+  <div style="font-size: 10px; color: var(--text-dim);">Click + to add notes</div>
+</div>
+
+<script>
+  // ---- Drag & Drop ----
+  let dragCard = null;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('mousedown', (e) => {
+      if (e.target.tagName === 'SUMMARY' || e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+      dragCard = card;
+      dragCard.classList.add('dragging');
+      const rect = card.getBoundingClientRect();
+      const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+      const scrollLeft = document.getElementById('canvas').scrollLeft;
+      const scrollTop = document.getElementById('canvas').scrollTop;
+      dragOffsetX = e.clientX - rect.left + canvasRect.left - 30 + scrollLeft;
+      dragOffsetY = e.clientY - rect.top + canvasRect.top - 30 + scrollTop;
+      // Bring to front
+      card.style.zIndex = 50;
+    });
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragCard) return;
+    const canvas = document.getElementById('canvas');
+    const x = e.clientX - dragOffsetX + canvas.scrollLeft;
+    const y = e.clientY - dragOffsetY + canvas.scrollTop;
+    dragCard.style.left = x + 'px';
+    dragCard.style.top = y + 'px';
+    drawConnections();
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (dragCard) {
+      dragCard.classList.remove('dragging');
+      dragCard.style.zIndex = 10;
+      dragCard = null;
+    }
+  });
+
+  // ---- Connections ----
+  const connectionDefs = [
+    { from: 'card-routes', to: 'card-controller', label: 'routes to' },
+    { from: 'card-controller', to: 'card-model', label: 'calls destroy' },
+    { from: 'card-model', to: 'card-serializer', label: 'can_destroy?' },
+    { from: 'card-meterstab', to: 'card-pinot', label: 'onMeterRemoved' },
+    { from: 'card-pinot', to: 'card-meterchart', label: 'onMeterRemoved' },
+    { from: 'card-meterchart', to: 'card-controller', label: 'DELETE API', },
+    { from: 'card-meterchart', to: 'card-styles', label: 'styles' },
+    { from: 'card-ctrl-spec', to: 'card-controller', label: 'tests' },
+    { from: 'card-ser-spec', to: 'card-serializer', label: 'tests' },
+    { from: 'card-meterstab-test', to: 'card-meterstab', label: 'tests' },
+    { from: 'card-meterchart-test', to: 'card-meterchart', label: 'tests' },
+  ];
+
+  let connectionsVisible = true;
+
+  function getCardCenter(id) {
+    const el = document.getElementById(id);
+    if (!el) return { x: 0, y: 0 };
+    const left = parseFloat(el.style.left) || 0;
+    const top = parseFloat(el.style.top) || 0;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    return { x: left + w / 2, y: top + h / 2 };
+  }
+
+  function getCardEdgePoint(id, targetPoint) {
+    const el = document.getElementById(id);
+    if (!el) return { x: 0, y: 0 };
+    const left = parseFloat(el.style.left) || 0;
+    const top = parseFloat(el.style.top) || 0;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const cx = left + w / 2;
+    const cy = top + h / 2;
+
+    const dx = targetPoint.x - cx;
+    const dy = targetPoint.y - cy;
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+
+    if (absDx * h > absDy * w) {
+      // Intersects left or right edge
+      const sign = dx > 0 ? 1 : -1;
+      return { x: cx + sign * w / 2, y: cy + dy * (w / 2) / absDx };
+    } else {
+      // Intersects top or bottom edge
+      const sign = dy > 0 ? 1 : -1;
+      return { x: cx + dx * (h / 2) / absDy, y: cy + sign * h / 2 };
+    }
+  }
+
+  function drawConnections() {
+    const svg = document.getElementById('connections');
+    svg.innerHTML = '';
+    if (!connectionsVisible) return;
+
+    connectionDefs.forEach(conn => {
+      const fromCenter = getCardCenter(conn.from);
+      const toCenter = getCardCenter(conn.to);
+      const fromPt = getCardEdgePoint(conn.from, toCenter);
+      const toPt = getCardEdgePoint(conn.to, fromCenter);
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', fromPt.x);
+      line.setAttribute('y1', fromPt.y);
+      line.setAttribute('x2', toPt.x);
+      line.setAttribute('y2', toPt.y);
+      svg.appendChild(line);
+
+      if (conn.label) {
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', (fromPt.x + toPt.x) / 2);
+        text.setAttribute('y', (fromPt.y + toPt.y) / 2 - 6);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('class', 'conn-label');
+        text.textContent = conn.label;
+        svg.appendChild(text);
+      }
+    });
+  }
+
+  function toggleConnections() {
+    connectionsVisible = !connectionsVisible;
+    drawConnections();
+  }
+
+  // ---- Initial positions stored for reset ----
+  const initialPositions = {};
+  document.querySelectorAll('.card').forEach(card => {
+    initialPositions[card.id] = { left: card.style.left, top: card.style.top };
+  });
+
+  function resetLayout() {
+    document.querySelectorAll('.card').forEach(card => {
+      if (initialPositions[card.id]) {
+        card.style.left = initialPositions[card.id].left;
+        card.style.top = initialPositions[card.id].top;
+      }
+    });
+    drawConnections();
+  }
+
+  // Draw initial connections
+  drawConnections();
+
+  // Redraw on window resize
+  window.addEventListener('resize', drawConnections);
+
+  // Redraw when details elements toggle (cards change height)
+  document.querySelectorAll('details').forEach(d => {
+    d.addEventListener('toggle', () => setTimeout(drawConnections, 10));
+  });
+</script>
+
+</body>
+</html>
