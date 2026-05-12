@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><%= title %></title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #24283b;
+    --surface-hover: #292e42;
+    --border: #414868;
+    --text: #c0caf5;
+    --text-dim: #565f89;
+    --text-bright: #e0e6ff;
+    --green: #9ece6a;
+    --green-bg: rgba(158, 206, 106, 0.08);
+    --green-border: rgba(158, 206, 106, 0.5);
+    --orange: #e0af68;
+    --orange-bg: rgba(224, 175, 104, 0.08);
+    --orange-border: rgba(224, 175, 104, 0.5);
+    --red: #f7768e;
+    --red-bg: rgba(247, 118, 142, 0.08);
+    --red-border: rgba(247, 118, 142, 0.5);
+    --blue: #7aa2f7;
+    --purple: #bb9af7;
+    --cyan: #7dcfff;
+    --connection-color: #7a88b0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  .top-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .top-bar h1 { font-size: 14px; font-weight: 600; color: var(--text-bright); }
+
+  .top-bar .stats {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .top-bar .stats span { margin-right: 12px; }
+  .top-bar .stats .additions { color: var(--green); }
+  .top-bar .stats .deletions { color: var(--red); }
+
+  .top-bar .controls { margin-left: auto; display: flex; gap: 8px; }
+
+  .top-bar button {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .top-bar button:hover { background: var(--border); }
+
+  .canvas {
+    position: absolute;
+    top: 46px; left: 0; right: 0; bottom: 0;
+    overflow: auto;
+  }
+  .canvas.with-context {
+    top: 46px; /* adjusted by JS after context bar renders */
+  }
+
+  .canvas-inner {
+    position: relative;
+    min-width: 2000px;
+    min-height: 2000px;
+    padding: 30px;
+  }
+
+  .connections {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .card {
+    position: absolute;
+    width: 420px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    z-index: 10;
+    cursor: grab;
+    user-select: none;
+    transition: box-shadow 0.15s;
+  }
+  .card:hover { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); }
+  .card.dragging { cursor: grabbing; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); z-index: 50; opacity: 0.95; }
+
+  .card.new { border-color: var(--green-border); background: var(--green-bg); }
+  .card.modified { border-color: var(--orange-border); background: var(--orange-bg); }
+  .card.deleted { border-color: var(--red-border); background: var(--red-bg); }
+  .card.renamed { border-color: var(--orange-border); background: var(--orange-bg); }
+
+  .card-header {
+    padding: 10px 12px 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+  .status-dot.new { background: var(--green); }
+  .status-dot.modified { background: var(--orange); }
+  .status-dot.deleted { background: var(--red); }
+  .status-dot.renamed { background: var(--orange); }
+
+  .file-badge {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .badge-model { background: rgba(187, 154, 247, 0.2); color: var(--purple); }
+  .badge-controller { background: rgba(122, 162, 247, 0.2); color: var(--blue); }
+  .badge-serializer { background: rgba(125, 207, 255, 0.2); color: var(--cyan); }
+  .badge-service { background: rgba(125, 207, 255, 0.2); color: var(--cyan); }
+  .badge-config { background: rgba(224, 175, 104, 0.2); color: var(--orange); }
+  .badge-component { background: rgba(158, 206, 106, 0.2); color: var(--green); }
+  .badge-styles { background: rgba(187, 154, 247, 0.15); color: #c4a7f7; }
+  .badge-spec { background: rgba(247, 118, 142, 0.2); color: var(--red); }
+  .badge-migration { background: rgba(224, 175, 104, 0.2); color: var(--orange); }
+  .badge-job { background: rgba(125, 207, 255, 0.2); color: var(--cyan); }
+  .badge-other { background: rgba(86, 95, 137, 0.3); color: var(--text-dim); }
+
+  .filename {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-bright);
+    word-break: break-all;
+    line-height: 1.4;
+  }
+
+  .card-body {
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.6;
+  }
+
+  .line-counts {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .line-counts .add { color: var(--green); }
+  .line-counts .del { color: var(--red); }
+
+  .card-summary {
+    margin-top: 6px;
+    font-size: 12px;
+  }
+
+  .card-details {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    border-left: 2px solid var(--border);
+  }
+  .card-details summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .card-details summary:hover { color: var(--text); }
+  .card-details .detail-content {
+    margin-top: 4px;
+    font-size: 11px;
+  }
+
+  .annotation {
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .annotation.observation { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
+  .annotation.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
+  .annotation.concern { background: rgba(247,118,142,0.12); border-left: 2px solid var(--red); color: var(--red); }
+
+  .connections line {
+    stroke: var(--connection-color);
+    stroke-width: 1.5;
+    stroke-dasharray: 6, 4;
+  }
+  .connections .conn-label {
+    font-size: 10px;
+    fill: var(--connection-color);
+    font-family: inherit;
+  }
+
+  .legend {
+    position: fixed;
+    bottom: 16px; right: 16px;
+    z-index: 100;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 11px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .context-bar {
+    position: fixed;
+    top: 46px; left: 0; right: 0;
+    z-index: 99;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease, padding 0.2s ease;
+  }
+  .context-bar.empty { display: none; }
+  .context-bar.open {
+    max-height: 200px;
+    padding: 10px 20px;
+  }
+  .context-description {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .context-toggle {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 4px 6px;
+    font-family: inherit;
+  }
+  .context-toggle:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1><%= title %></h1>
+  <div class="stats">
+    <span class="additions">+<%= stats[:additions] || 0 %></span>
+    <span class="deletions">-<%= stats[:deletions] || 0 %></span>
+    <span><%= stats[:files] || 0 %> files</span>
+  </div>
+  <%- if context && context[:description] -%>
+  <button class="context-toggle" onclick="toggleContext()" id="contextToggle">▸ Details</button>
+  <%- end -%>
+  <div class="controls">
+    <button onclick="resetLayout()">Reset Layout</button>
+    <button onclick="toggleConnections()">Toggle Lines</button>
+  </div>
+</div>
+
+<%- has_context = context && context[:description] -%>
+<div class="context-bar<%= ' empty' unless has_context %>" id="contextBar">
+  <%- if has_context -%>
+  <div class="context-description"><%= context[:description] %></div>
+  <%- end -%>
+</div>
+
+<div class="canvas" id="canvas">
+  <div class="canvas-inner" id="canvasInner">
+    <svg class="connections" id="connections"></svg>
+
+    <%- files.each do |file| -%>
+    <div class="card <%= status_class(file) %>"
+         id="card-<%= file[:id] %>"
+         style="left: <%= layout[file[:id]][:x] %>px; top: <%= layout[file[:id]][:y] %>px;">
+      <div class="card-header">
+        <span class="status-dot <%= status_class(file) %>"></span>
+        <span class="file-badge <%= badge_class(file) %>"><%= file[:type] %></span>
+        <span class="filename"><%= file[:path] %></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+<%= file[:additions] %></span>
+          <span class="del">-<%= file[:deletions] %></span>
+        </div>
+        <%- if file[:summary] -%>
+        <div class="card-summary"><%= file[:summary] %></div>
+        <%- end -%>
+        <%- (file[:details] || []).each do |detail| -%>
+        <details class="card-details">
+          <summary><%= detail[:label] %></summary>
+          <div class="detail-content"><%= detail[:description] %></div>
+        </details>
+        <%- end -%>
+        <%- (file[:annotations] || []).each do |ann| -%>
+        <div class="annotation <%= ann[:type] %>"><%= ann[:text] %></div>
+        <%- end -%>
+      </div>
+    </div>
+    <%- end -%>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background: var(--green);"></div> New file</div>
+  <div class="legend-item"><div class="legend-dot" style="background: var(--orange);"></div> Modified</div>
+  <div class="legend-item"><div class="legend-dot" style="background: var(--red);"></div> Deleted</div>
+  <div style="border-top: 1px solid var(--border); margin: 6px 0;"></div>
+  <div style="font-size: 10px; color: var(--text-dim);">Drag cards to rearrange</div>
+</div>
+
+<script>
+const CONNECTIONS = <%= connections_json %>;
+
+// Drag & drop
+let dragCard = null, dragOffsetX = 0, dragOffsetY = 0;
+
+document.querySelectorAll('.card').forEach(card => {
+  card.addEventListener('mousedown', (e) => {
+    if (['SUMMARY','BUTTON','TEXTAREA','INPUT'].includes(e.target.tagName)) return;
+    dragCard = card;
+    dragCard.classList.add('dragging');
+    const rect = card.getBoundingClientRect();
+    const canvas = document.getElementById('canvas');
+    dragOffsetX = e.clientX - rect.left + canvas.getBoundingClientRect().left - 30 + canvas.scrollLeft;
+    dragOffsetY = e.clientY - rect.top + canvas.getBoundingClientRect().top - 30 + canvas.scrollTop;
+    card.style.zIndex = 50;
+  });
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!dragCard) return;
+  const canvas = document.getElementById('canvas');
+  dragCard.style.left = (e.clientX - dragOffsetX + canvas.scrollLeft) + 'px';
+  dragCard.style.top = (e.clientY - dragOffsetY + canvas.scrollTop) + 'px';
+  drawConnections();
+});
+
+document.addEventListener('mouseup', () => {
+  if (dragCard) {
+    dragCard.classList.remove('dragging');
+    dragCard.style.zIndex = 10;
+    dragCard = null;
+  }
+});
+
+// Connection lines
+let connectionsVisible = true;
+
+function getCardEdgePoint(id, targetPoint) {
+  const el = document.getElementById('card-' + id);
+  if (!el) return { x: 0, y: 0 };
+  const left = parseFloat(el.style.left) || 0;
+  const top = parseFloat(el.style.top) || 0;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const cx = left + w/2, cy = top + h/2;
+  const dx = targetPoint.x - cx, dy = targetPoint.y - cy;
+  const absDx = Math.abs(dx), absDy = Math.abs(dy);
+
+  if (absDx * h > absDy * w) {
+    const sign = dx > 0 ? 1 : -1;
+    return { x: cx + sign * w/2, y: cy + dy * (w/2) / absDx };
+  } else {
+    const sign = dy > 0 ? 1 : -1;
+    return { x: cx + dx * (h/2) / absDy, y: cy + sign * h/2 };
+  }
+}
+
+function getCardCenter(id) {
+  const el = document.getElementById('card-' + id);
+  if (!el) return { x: 0, y: 0 };
+  return {
+    x: (parseFloat(el.style.left) || 0) + el.offsetWidth/2,
+    y: (parseFloat(el.style.top) || 0) + el.offsetHeight/2
+  };
+}
+
+function drawConnections() {
+  const svg = document.getElementById('connections');
+  svg.innerHTML = '';
+  if (!connectionsVisible) return;
+
+  CONNECTIONS.forEach(conn => {
+    const fromCenter = getCardCenter(conn.from);
+    const toCenter = getCardCenter(conn.to);
+    const fromPt = getCardEdgePoint(conn.from, toCenter);
+    const toPt = getCardEdgePoint(conn.to, fromCenter);
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', fromPt.x);
+    line.setAttribute('y1', fromPt.y);
+    line.setAttribute('x2', toPt.x);
+    line.setAttribute('y2', toPt.y);
+    svg.appendChild(line);
+
+    if (conn.label) {
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', (fromPt.x + toPt.x) / 2);
+      text.setAttribute('y', (fromPt.y + toPt.y) / 2 - 6);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('class', 'conn-label');
+      text.textContent = conn.label;
+      svg.appendChild(text);
+    }
+  });
+}
+
+function toggleConnections() {
+  connectionsVisible = !connectionsVisible;
+  drawConnections();
+}
+
+// Reset
+const initialPositions = {};
+document.querySelectorAll('.card').forEach(card => {
+  initialPositions[card.id] = { left: card.style.left, top: card.style.top };
+});
+
+function resetLayout() {
+  document.querySelectorAll('.card').forEach(card => {
+    if (initialPositions[card.id]) {
+      card.style.left = initialPositions[card.id].left;
+      card.style.top = initialPositions[card.id].top;
+    }
+  });
+  drawConnections();
+}
+
+// Init
+function adjustCanvasTop() {
+  const bar = document.getElementById('contextBar');
+  const canvas = document.getElementById('canvas');
+  if (bar && !bar.classList.contains('empty')) {
+    canvas.style.top = (46 + bar.offsetHeight) + 'px';
+  } else {
+    canvas.style.top = '46px';
+  }
+}
+
+function toggleContext() {
+  const bar = document.getElementById('contextBar');
+  const btn = document.getElementById('contextToggle');
+  bar.classList.toggle('open');
+  btn.textContent = bar.classList.contains('open') ? '▾ Details' : '▸ Details';
+  setTimeout(adjustCanvasTop, 220);
+}
+
+adjustCanvasTop();
+drawConnections();
+window.addEventListener('resize', drawConnections);
+document.querySelectorAll('details').forEach(d => {
+  d.addEventListener('toggle', () => setTimeout(drawConnections, 10));
+});
+</script>
+</body>
+</html>
