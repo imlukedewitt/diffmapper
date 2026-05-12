@@ -1,80 +1,117 @@
 # DiffMapper
 
-Visual PR/diff review tool that generates single-page HTML "canvases" from git diffs — spatial card layouts showing files, changes, relationships, and annotations.
+Visual PR/diff review tool — generates spatial HTML canvases from git diffs. Cards for each changed file, color-coded by status, with connection lines showing relationships. Draggable canvas layout.
 
 ## Origin
 
-Luke builds Obsidian JSON Canvas files to review PRs — cards per file with summaries, grouped by category, with arrows showing flow between files. Valuable for understanding complex changes but slow to build manually. This tool automates that.
+Luke builds Obsidian JSON Canvas files to review PRs — cards per file with summaries, arrows showing flow. Valuable but slow to build manually. This tool automates that.
 
-## Prototype v1
-
-`prototype-v1.html` — generated against PR branch `codex/add-remove-option-for-unused-meters` in the Chargify repo (12 files, +424 −12).
-
-### What's in it
-
-- **Cards** for each changed file with summaries of what changed
-- **Color coding**: green border = new file, orange = modified, red = deleted
-- **File type badges**: model, controller, serializer, component, spec, config (secondary info, not the border color)
-- **Connection lines** (dashed SVG) between related files with labels ("calls destroy", "onMeterRemoved", "tests")
-- **Expandable method details** for complex files — collapsible per-method breakdowns
-- **Draggable cards** — grab and rearrange on the canvas
-- **Group labels** — "Backend", "Frontend Components", "Backend Specs", "Frontend Specs"
-- **Context card** (blue) with PR summary, branch name, flow overview
-- **Controls**: Reset Layout, Toggle Lines
-- **Legend** in bottom-right corner
-
-### How v1 was made
-
-Entirely LLM-generated in one shot:
-1. Fetched the branch, ran `git diff --stat` then full `git diff`
-2. LLM analyzed all changes — categorized files, summarized each, identified method-level details, mapped relationships
-3. LLM wrote the entire HTML file (cards, positions, connections, styles, drag JS)
-
-### What worked
-
-- The spatial layout immediately communicates structure better than a flat diff
-- Grouping by backend/frontend/specs mirrors how you think about the changes
-- Expandable method details handle complex files without overwhelming the overview
-- Connection lines show the flow (route → controller → model, component prop drilling)
-- Draggable cards let you refine the layout
-
-### What needs work
-
-- No annotation/note-taking on cards yet (button exists but not wired up)
-- Connection lines have no arrowheads (directionality unclear)
-- Layout is manually positioned per-card in the HTML (hardcoded `left`/`top` px values)
-- Card heights vary with content, spacing isn't responsive to that
-- No minimap for large PRs
-- Entire thing is LLM-generated each time — slow and inconsistent
-
-## Next direction: tool for LLMs
-
-The goal is to split this into **deterministic template/renderer** + **LLM-provided analysis data**.
-
-### What can be deterministic (no LLM needed)
-
-- HTML/CSS/JS template (the renderer)
-- File list, paths, new/modified/deleted status (from `git diff --stat`)
-- File type classification (model/controller/spec/etc — pattern matching on paths)
-- Line counts (+/−)
-- Spec-to-source file mapping (predictable path conventions)
-- Card layout algorithm (auto-position by category/group)
-- Connection lines rendering
-- Drag, toggle, reset UI
-
-### What needs LLM
-
-- Per-file change summaries (what changed and why it matters)
-- Method-level breakdowns for complex files
-- Relationship detection beyond spec↔source (e.g., "this controller calls this model method")
-- Grouping suggestions beyond directory-based defaults
-- The context/summary card content
-- Annotations, questions, observations
-
-### Architecture idea
+## Architecture
 
 ```
-git diff → parser (deterministic) → structured JSON → LLM enrichment → final JSON → HTML renderer (deterministic)
+git diff → Parser (deterministic) → JSON → [Agent enrichment] → Renderer (deterministic) → HTML
 ```
 
-The LLM's job shrinks to: "given this structured diff data, add summaries and relationships." The renderer is a static template that takes JSON and builds the canvas. This makes output faster, more consistent, and the template can be iterated independently.
+**Ruby gem** with CLI. No framework. The tool is fully deterministic — LLM intelligence lives outside it, in an agent skill.
+
+### Parser (`diffmapper parse`)
+
+- Splits raw git diff into per-file data
+- `DiffParser` — extracts paths, status (new/modified/deleted/renamed), line counts, raw hunks
+- `FileClassifier` — regex on paths → type (model, controller, service, component, spec, config, styles, migration, job, other)
+- `ConnectionDetector` — matches specs to source files by path convention (Rails `spec/` → `app/`, JS `.test.js` → `.js`), including collapsed nested specs (`spec/services/foo/foo_spec.rb` → `app/services/foo.rb`)
+
+### Renderer (`diffmapper render`)
+
+- Takes JSON, produces self-contained HTML file via ERB template
+- JS-based layout: cards rendered hidden, measured, then positioned absolutely
+- Paired source+spec files placed side by side
+- Draggable cards, SVG connection lines, expandable details
+- Top bar with title, stats, collapsible context description
+- Tokyo Night color scheme
+
+### CLI
+
+```bash
+diffmapper master...feature                  # Default: preview (parse + render → HTML)
+diffmapper parse master...feature            # Output base JSON
+diffmapper render enriched.json              # Render enriched JSON → HTML
+cat diff.patch | diffmapper                  # Piped input works too
+```
+
+Auto-detects branch name, base, generates title (strips ticket prefixes like `PLS-1519`).
+
+## JSON Schema
+
+```jsonc
+{
+  "meta": {
+    "title": "Hide include trial on primary reactivation",
+    "branch": "PLS-1519-hide-include-trial-on-primary-reactivation",
+    "base": "master",
+    "generated_at": "2026-05-12T...",
+    "stats": { "files": 13, "additions": 147, "deletions": 12 }
+  },
+  "context": {
+    "summary": "Short summary",          // LLM-provided
+    "description": "Longer description"  // LLM-provided
+  },
+  "files": [
+    {
+      "id": "archiver",
+      "path": "app/services/tasks/archiver.rb",
+      "status": "modified",              // new|modified|deleted|renamed
+      "type": "service",                 // model|controller|service|component|spec|config|styles|migration|job|other
+      "additions": 17,
+      "deletions": 1,
+      "hunks": "@@ ...",                 // raw diff — for LLM to analyze, renderer ignores
+      "summary": "...",                  // LLM-provided
+      "details": [                       // LLM-provided
+        { "label": "method name", "description": "what it does" }
+      ],
+      "annotations": [                   // LLM-provided
+        { "type": "observation|question|concern", "text": "..." }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "archiver_spec",
+      "to": "archiver",
+      "label": "tests",
+      "type": "test"                     // test|calls|renders|passes_prop|styles
+    }
+  ]
+}
+```
+
+Parser fills in everything except LLM-provided fields. Those are optional — the renderer works without them (you just get cards with paths and line counts).
+
+## LLM Enrichment: Agent Skill Approach
+
+The LLM enrichment step lives **outside** the tool, as an agent skill. The tool stays fully deterministic. The agent is the intelligence.
+
+### Flow
+
+1. `diffmapper parse master...branch > /tmp/dm_base.json`
+2. Agent reads JSON, analyzes hunks, enriches with summaries/details/connections/annotations
+3. Agent writes enriched JSON to `/tmp/dm_enriched.json`
+4. `diffmapper render /tmp/dm_enriched.json > /tmp/review.html`
+5. `open /tmp/review.html`
+
+### Why JSON, not HTML enrichment
+
+- Hunks (raw diff content) live in the JSON — that's what the agent reads to understand changes. The HTML doesn't include them.
+- JSON is small and structured — easy for the agent to read/modify. HTML is 15-20KB of templates/CSS/JS noise.
+- Clear schema contract — agent knows exactly what to fill in. HTML editing is fragile.
+- The user never sees or thinks about JSON files. The skill handles it invisibly.
+
+## Testing
+
+- **RSpec** for all Ruby code (parser, renderer, CLI)
+- **Capybara + Cuprite** for browser tests of generated HTML (planned)
+- Fixtures in `spec/fixtures/diffs/`
+
+## Prototype
+
+`prototype-v1.html` — the original LLM-one-shot proof of concept that inspired this tool. Kept for reference.
