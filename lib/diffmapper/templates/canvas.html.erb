@@ -539,6 +539,21 @@ const GROUPS = <%= grouped_files_json %>;
 const CARD_WIDTH = 420;
 const GAP = 40;
 const PAIR_GAP = 60;
+const FILES_BY_ID = buildFileLookup();
+
+function buildFileLookup() {
+  const files = [
+    ...GROUPS.paired.flatMap(([source, spec]) => [source, spec]),
+    ...GROUPS.unpaired_sources,
+    ...GROUPS.unpaired_specs
+  ];
+
+  return new Map(files.map(file => [file.id, file]));
+}
+
+function fileMeta(id) {
+  return FILES_BY_ID.get(id) || { id: id, type: 'other', dir: 'other' };
+}
 
 // Drag & drop
 let dragCard = null, dragOffsetX = 0, dragOffsetY = 0, topZ = 10;
@@ -661,117 +676,245 @@ function resetLayout() {
 
 // Layout
 function layoutCards() {
-  // Show all cards first so we can measure them
   document.querySelectorAll('.card').forEach(card => {
     card.style.visibility = 'visible';
   });
 
-  // Remove old cluster labels
   document.querySelectorAll('.cluster-label').forEach(el => el.remove());
 
-  // Seed initial positions by walking the call graph
-  seedByCallGraph();
-
-  // Refine with force-directed layout
+  seedByConnectedComponents();
   forceDirectedRefine();
 }
 
-function seedByCallGraph() {
+function buildMeasuredNodeMap(readPositions = true) {
   const cards = Array.from(document.querySelectorAll('.card'));
-  const nodeMap = new Map(cards.map(el => {
+
+  return new Map(cards.map(el => {
     const id = el.id.replace('card-', '');
-    return [id, el];
+    const meta = fileMeta(id);
+
+    return [id, {
+      el: el,
+      id: id,
+      x: readPositions ? (parseFloat(el.style.left) || 0) : 0,
+      y: readPositions ? (parseFloat(el.style.top) || 0) : 0,
+      w: el.offsetWidth,
+      h: el.offsetHeight,
+      type: meta.type,
+      dir: meta.dir
+    }];
   }));
+}
 
-  // Build adjacency from non-test connections
-  const callEdges = CONNECTIONS.filter(c => c.type !== 'test');
-  const calledBy = new Map(); // child -> parent
-  callEdges.forEach(c => {
-    if (!calledBy.has(c.to)) calledBy.set(c.to, []);
-    calledBy.get(c.to).push(c.from);
-  });
+function seedByConnectedComponents() {
+  const nodeMap = buildMeasuredNodeMap(false);
+  const units = buildLayoutUnits(nodeMap);
+  const edges = buildLayoutEdges(nodeMap, units);
+  const components = buildLayoutComponents(units, edges);
+  const MAX_ROW_WIDTH = 2800;
 
-  // Find roots: nodes that call others but aren't called by anyone
-  const allTargets = new Set(callEdges.map(c => c.to));
-  const allSources = new Set(callEdges.map(c => c.from));
-  const roots = [...allSources].filter(id => !allTargets.has(id));
-
-  // Assign depth via BFS from roots
-  const depth = new Map();
-  const queue = roots.map(id => ({ id, d: 0 }));
-  // Also add all nodes not in any call edge at depth 0
-  nodeMap.forEach((_, id) => {
-    if (!allSources.has(id) && !allTargets.has(id) && !depth.has(id)) {
-      queue.push({ id, d: 0 });
-    }
-  });
-
-  while (queue.length > 0) {
-    const { id, d } = queue.shift();
-    if (depth.has(id)) continue;
-    depth.set(id, d);
-    // Find nodes this one calls
-    callEdges.filter(c => c.from === id).forEach(c => {
-      if (!depth.has(c.to)) queue.push({ id: c.to, d: d + 1 });
-    });
-  }
-  // Assign remaining nodes
-  nodeMap.forEach((_, id) => { if (!depth.has(id)) depth.set(id, 0); });
-
-  // Group by depth, find test pairs
-  const testPairs = new Map();
-  CONNECTIONS.filter(c => c.type === 'test').forEach(c => {
-    testPairs.set(c.from, c.to); // spec -> source
-    testPairs.set(c.to, c.from); // source -> spec
-  });
-
-  // Position: each depth level is a row, pairs side by side
-  const placed = new Set();
-  const maxDepth = Math.max(...depth.values());
+  let x = GAP;
   let y = GAP;
+  let rowHeight = 0;
+  let maxX = 0;
 
-  for (let d = 0; d <= maxDepth; d++) {
-    const nodesAtDepth = [...depth.entries()]
-      .filter(([_, dd]) => dd === d)
-      .map(([id]) => id)
-      .filter(id => !placed.has(id));
+  components.forEach(component => {
+    layoutComponentAsStory(component);
 
-    if (nodesAtDepth.length === 0) continue;
+    if (x > GAP && x + component.w > MAX_ROW_WIDTH) {
+      x = GAP;
+      y += rowHeight + GAP * 3;
+      rowHeight = 0;
+    }
 
-    let x = GAP;
-    nodesAtDepth.forEach(id => {
-      if (placed.has(id)) return;
-      const el = nodeMap.get(id);
-      if (!el) return;
+    offsetComponent(component, x, y);
+    component.units.forEach(unit => applyUnitPosition(unit));
 
-      el.style.left = x + 'px';
-      el.style.top = y + 'px';
-      placed.add(id);
+    maxX = Math.max(maxX, x + component.w);
+    rowHeight = Math.max(rowHeight, component.h);
+    x += component.w + GAP * 3;
+  });
 
-      // Place test pair next to it
-      const pairId = testPairs.get(id);
-      if (pairId && !placed.has(pairId)) {
-        const pairEl = nodeMap.get(pairId);
-        if (pairEl) {
-          pairEl.style.left = (x + el.offsetWidth + PAIR_GAP) + 'px';
-          pairEl.style.top = y + 'px';
-          placed.add(pairId);
-          x += el.offsetWidth + PAIR_GAP + pairEl.offsetWidth + GAP * 2;
-        }
-      } else {
-        x += el.offsetWidth + GAP * 2;
-      }
-    });
+  document.getElementById('canvasInner').style.minHeight = (y + rowHeight + 400) + 'px';
+  document.getElementById('canvasInner').style.minWidth = Math.max(2500, maxX + GAP * 2) + 'px';
+}
 
-    // Find max height in this row
-    const rowEls = nodesAtDepth.map(id => nodeMap.get(id)).filter(Boolean);
-    const maxH = Math.max(...rowEls.map(el => el.offsetHeight));
-    y += maxH + GAP * 2;
+function buildLayoutComponents(units, edges) {
+  const componentIds = buildConnectedComponents(units, edges);
+  const grouped = new Map();
+
+  units.forEach(unit => {
+    const componentId = componentIds.get(unit);
+    if (!grouped.has(componentId)) {
+      grouped.set(componentId, { id: componentId, units: [], edges: [] });
+    }
+
+    grouped.get(componentId).units.push(unit);
+  });
+
+  edges.forEach(edge => {
+    const componentId = componentIds.get(edge.source);
+    grouped.get(componentId).edges.push(edge);
+  });
+
+  return Array.from(grouped.values()).sort(compareLayoutComponents);
+}
+
+function buildConnectedComponents(units, edges) {
+  const adjacency = new Map(units.map(unit => [unit, new Set()]));
+  edges.forEach(edge => {
+    adjacency.get(edge.source).add(edge.target);
+    adjacency.get(edge.target).add(edge.source);
+  });
+
+  const componentIds = new Map();
+  let nextId = 0;
+
+  units.forEach(unit => {
+    if (componentIds.has(unit)) return;
+
+    const stack = [unit];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (componentIds.has(current)) continue;
+
+      componentIds.set(current, nextId);
+      adjacency.get(current).forEach(neighbor => {
+        if (!componentIds.has(neighbor)) stack.push(neighbor);
+      });
+    }
+
+    nextId += 1;
+  });
+
+  return componentIds;
+}
+
+function compareLayoutComponents(a, b) {
+  const zoneDelta = layoutZoneForComponent(a) - layoutZoneForComponent(b);
+  if (zoneDelta !== 0) return zoneDelta;
+
+  if (a.units.length !== b.units.length) return b.units.length - a.units.length;
+  if (a.edges.length !== b.edges.length) return b.edges.length - a.edges.length;
+
+  return componentPrimaryId(a).localeCompare(componentPrimaryId(b));
+}
+
+function layoutZoneForComponent(component) {
+  const dirs = component.units.map(unit => unit.dir || '');
+  const allSpecs = component.units.every(unit => unit.layoutType === 'spec');
+
+  if (dirs.some(dir => dir.startsWith('frontend/'))) return 1;
+  if (allSpecs) return 2;
+  return 0;
+}
+
+function componentPrimaryId(component) {
+  return component.units
+    .map(unit => primaryIdForUnit(unit))
+    .sort()[0] || '';
+}
+
+function layoutComponentAsStory(component) {
+  const orderedUnits = buildComponentStoryOrder(component);
+  let y = 0;
+  let maxW = 0;
+
+  orderedUnits.forEach((unit, index) => {
+    unit.x = 0;
+    unit.y = y;
+    maxW = Math.max(maxW, unit.w);
+    y += unit.h;
+    if (index < orderedUnits.length - 1) y += GAP * 2;
+  });
+
+  component.units = orderedUnits;
+  component.w = maxW;
+  component.h = orderedUnits.length === 0 ? 0 : y;
+}
+
+function buildComponentStoryOrder(component) {
+  const adjacency = new Map(component.units.map(unit => [unit, new Set()]));
+  const counts = new Map(component.units.map(unit => [unit, { incoming: 0, outgoing: 0 }]));
+
+  component.edges.forEach(edge => {
+    adjacency.get(edge.source).add(edge.target);
+    adjacency.get(edge.target).add(edge.source);
+    counts.get(edge.source).outgoing += 1;
+    counts.get(edge.target).incoming += 1;
+  });
+
+  const candidates = component.units.filter(unit => adjacency.get(unit).size <= 1);
+  const startPool = candidates.length > 0 ? candidates : component.units;
+  const orderedStartPool = startPool.sort((a, b) => compareTraversalUnits(a, b, adjacency, counts));
+  const visited = new Set();
+  const ordered = [];
+
+  function visit(unit) {
+    if (visited.has(unit)) return;
+
+    visited.add(unit);
+    ordered.push(unit);
+
+    Array.from(adjacency.get(unit))
+      .filter(neighbor => !visited.has(neighbor))
+      .sort((a, b) => compareTraversalUnits(a, b, adjacency, counts))
+      .forEach(visit);
   }
 
-  // Size canvas for initial layout
-  document.getElementById('canvasInner').style.minHeight = (y + 400) + 'px';
-  document.getElementById('canvasInner').style.minWidth = '2500px';
+  orderedStartPool.forEach(visit);
+  component.units
+    .filter(unit => !visited.has(unit))
+    .sort((a, b) => compareTraversalUnits(a, b, adjacency, counts))
+    .forEach(visit);
+
+  return ordered;
+}
+
+function compareTraversalUnits(a, b, adjacency, counts) {
+  const startDelta = traversalStartBucket(a, counts) - traversalStartBucket(b, counts);
+  if (startDelta !== 0) return startDelta;
+
+  const typeDelta = traversalTypeBucket(a) - traversalTypeBucket(b);
+  if (typeDelta !== 0) return typeDelta;
+
+  const degreeDelta = adjacency.get(a).size - adjacency.get(b).size;
+  if (degreeDelta !== 0) return degreeDelta;
+
+  return primaryIdForUnit(a).localeCompare(primaryIdForUnit(b));
+}
+
+function traversalStartBucket(unit, counts) {
+  const count = counts.get(unit) || { incoming: 0, outgoing: 0 };
+
+  if (count.incoming === 0 && count.outgoing > 0) return 0;
+  if (count.outgoing > 0) return 1;
+  if (count.incoming > 0) return 2;
+  return 3;
+}
+
+function traversalTypeBucket(unit) {
+  switch (unit.layoutType) {
+    case 'controller': return 0;
+    case 'component': return 1;
+    case 'service': return 2;
+    case 'job': return 3;
+    case 'model': return 4;
+    case 'serializer': return 5;
+    case 'spec': return 6;
+    default: return 7;
+  }
+}
+
+function primaryIdForUnit(unit) {
+  return unit.primaryId || '';
+}
+
+function offsetComponent(component, offsetX, offsetY) {
+  component.units.forEach(unit => {
+    unit.x += offsetX;
+    unit.y += offsetY;
+  });
 }
 
 function buildClusters() {
@@ -816,19 +959,9 @@ function formatClusterLabel(dir) {
 }
 
 function forceDirectedRefine() {
-  const cards = Array.from(document.querySelectorAll('.card'));
-  if (cards.length === 0) return;
-
-  // Build node data
-  const allNodes = cards.map(el => ({
-    el: el,
-    id: el.id.replace('card-', ''),
-    x: parseFloat(el.style.left) || 0,
-    y: parseFloat(el.style.top) || 0,
-    w: el.offsetWidth,
-    h: el.offsetHeight
-  }));
-  const nodeMap = new Map(allNodes.map(n => [n.id, n]));
+  const nodeMap = buildMeasuredNodeMap();
+  const allNodes = Array.from(nodeMap.values());
+  if (allNodes.length === 0) return;
 
   // Build units: pairs become single units, singles are their own unit
   const units = buildLayoutUnits(nodeMap);
@@ -931,6 +1064,9 @@ function buildLayoutUnits(nodeMap) {
       type: 'pair',
       source: source,
       spec: spec,
+      primaryId: source.id,
+      layoutType: source.type,
+      dir: source.dir,
       x: Math.min(source.x, spec.x),
       y: Math.min(source.y, spec.y),
       w: source.w + PAIR_GAP + spec.w,
@@ -944,6 +1080,9 @@ function buildLayoutUnits(nodeMap) {
     units.push({
       type: 'single',
       node: node,
+      primaryId: node.id,
+      layoutType: node.type,
+      dir: node.dir,
       x: node.x,
       y: node.y,
       w: node.w,
@@ -1060,7 +1199,6 @@ function repositionClusterLabels(nodes) {
 
 function tidyLayout() {
   layoutCards();
-  forceDirectedRefine();
   drawConnections();
 }
 

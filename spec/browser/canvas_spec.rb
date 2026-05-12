@@ -92,6 +92,52 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(count_card_overlaps).to eq(0)
   end
 
+  it "layers connected files top-to-bottom while keeping test pairs horizontal" do
+    data = Diffmapper::Parser.new(
+      File.read(File.join(__dir__, "../fixtures/diffs/real_pr.diff"))
+    ).call
+    data[:connections] += [
+      { from: "archive_controller", to: "team_archiver", label: "passes params", type: "calls" },
+      { from: "bulk_actions_controller", to: "archiver", label: "passes params", type: "calls" },
+      { from: "team_archiver", to: "archiver", label: "delegates to", type: "calls" },
+      { from: "archivetimeline", to: "archiveoptions", label: "showSkipCheck", type: "passes_prop" },
+      { from: "index", to: "archiveoptions", label: "showSkipCheck", type: "passes_prop" }
+    ]
+
+    visit_generated_html(data_overrides: data)
+
+    positions = card_positions(
+      "archive_controller",
+      "archive_controller_spec",
+      "team_archiver",
+      "team_archiver_spec",
+      "archiver",
+      "archiver_spec",
+      "bulk_actions_controller",
+      "bulk_actions_controller_spec",
+      "archivetimeline",
+      "archiveoptions",
+      "index"
+    )
+
+    expect(positions["team_archiver"]["top"]).to be > positions["archive_controller"]["top"]
+    expect(positions["archiver"]["top"]).to be > positions["team_archiver"]["top"]
+    expect(positions["bulk_actions_controller"]["top"]).to be > positions["archiver"]["top"]
+
+    expect(positions["archivetimeline"]["top"]).to be < positions["archiveoptions"]["top"]
+    expect(positions["archiveoptions"]["top"]).to be < positions["index"]["top"]
+
+    expect(positions["archive_controller_spec"]["left"]).to be > positions["archive_controller"]["left"]
+    expect((positions["archive_controller_spec"]["top"] - positions["archive_controller"]["top"]).abs).to be < 20
+    expect(positions["team_archiver_spec"]["left"]).to be > positions["team_archiver"]["left"]
+    expect((positions["team_archiver_spec"]["top"] - positions["team_archiver"]["top"]).abs).to be < 20
+    expect(positions["bulk_actions_controller_spec"]["left"]).to be > positions["bulk_actions_controller"]["left"]
+    expect((positions["bulk_actions_controller_spec"]["top"] - positions["bulk_actions_controller"]["top"]).abs).to be < 20
+    expect(positions["archiver_spec"]["left"]).to be > positions["archiver"]["left"]
+    expect((positions["archiver_spec"]["top"] - positions["archiver"]["top"]).abs).to be < 20
+    expect(count_card_overlaps).to eq(0)
+  end
+
   it "expand all diffs opens all diff sections" do
     visit_generated_html
     click_button "Expand All Diffs"

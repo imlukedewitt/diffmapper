@@ -45,6 +45,19 @@ module BrowserTestHelper
     JS
   end
 
+  def card_positions(*ids)
+    page.evaluate_script(<<~JS)
+      (() => {
+        const ids = #{ids.flatten.to_json};
+
+        return Object.fromEntries(ids.map(id => {
+          const el = document.getElementById(`card-${id}`);
+          return [id, { left: el.offsetLeft, top: el.offsetTop }];
+        }));
+      })()
+    JS
+  end
+
   def rects_overlap?(rect_a, rect_b)
     overlaps_horizontally?(rect_a, rect_b) && overlaps_vertically?(rect_a, rect_b)
   end
