@@ -9,7 +9,7 @@ module Diffmapper
       { pattern: %r{^app/serializers/}, type: "serializer" },
       { pattern: %r{^app/services/}, type: "service" },
       { pattern: %r{^app/jobs/|^app/workers/}, type: "job" },
-      { pattern: %r{^app/views/|^app/components/|\.jsx$|\.tsx$|\.vue$}, type: "component" },
+      { pattern: %r{^app/views/|^app/components/|^frontend/|\.jsx$|\.tsx$|\.vue$}, type: "component" },
       { pattern: %r{^config/}, type: "config" },
       { pattern: /\.css$|\.scss$|\.styles\.|\.styled\./, type: "styles" },
       { pattern: %r{^db/migrate/}, type: "migration" }

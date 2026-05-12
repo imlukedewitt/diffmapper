@@ -21,6 +21,8 @@ RSpec.describe Diffmapper::FileClassifier do
       "app/views/users/index.html.erb" => "component",
       "src/components/MeterChart.jsx" => "component",
       "src/components/MeterChart.tsx" => "component",
+      "frontend/js/SubscriptionReactivation/NewBillingPeriod.js" => "component",
+      "frontend/js/SomeWidget/index.js" => "component",
       "config/routes.rb" => "config",
       "config/initializers/foo.rb" => "config",
       "app/assets/stylesheets/main.css" => "styles",
