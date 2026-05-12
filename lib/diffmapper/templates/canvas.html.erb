@@ -299,13 +299,13 @@
 </div>
 
 <div class="canvas" id="canvas">
-  <div class="canvas-inner" id="canvasInner">
+  <div class="canvas-inner" id="canvasInner" style="min-height: <%= canvas_min_height %>px;">
     <svg class="connections" id="connections"></svg>
 
     <%- files.each do |file| -%>
     <div class="card <%= status_class(file) %>"
          id="card-<%= file[:id] %>"
-         style="left: <%= layout[file[:id]][:x] %>px; top: <%= layout[file[:id]][:y] %>px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot <%= status_class(file) %>"></span>
         <span class="file-badge <%= badge_class(file) %>"><%= file[:type] %></span>
@@ -344,6 +344,10 @@
 
 <script>
 const CONNECTIONS = <%= connections_json %>;
+const GROUPS = <%= grouped_files.to_json %>;
+const CARD_WIDTH = 420;
+const GAP = 40;
+const PAIR_GAP = 60;
 
 // Drag & drop
 let dragCard = null, dragOffsetX = 0, dragOffsetY = 0;
@@ -444,10 +448,13 @@ function toggleConnections() {
 }
 
 // Reset
-const initialPositions = {};
-document.querySelectorAll('.card').forEach(card => {
-  initialPositions[card.id] = { left: card.style.left, top: card.style.top };
-});
+let initialPositions = {};
+
+function storePositions() {
+  document.querySelectorAll('.card').forEach(card => {
+    initialPositions[card.id] = { left: card.style.left, top: card.style.top };
+  });
+}
 
 function resetLayout() {
   document.querySelectorAll('.card').forEach(card => {
@@ -457,6 +464,59 @@ function resetLayout() {
     }
   });
   drawConnections();
+}
+
+// Layout
+function layoutCards() {
+  let y = GAP;
+  const leftX = GAP;
+  const rightX = GAP + CARD_WIDTH + PAIR_GAP;
+
+  // Paired source + spec side by side
+  GROUPS.paired.forEach(([source, spec]) => {
+    const sourceEl = document.getElementById('card-' + source.id);
+    const specEl = document.getElementById('card-' + spec.id);
+    if (!sourceEl || !specEl) return;
+
+    sourceEl.style.left = leftX + 'px';
+    sourceEl.style.top = y + 'px';
+    specEl.style.left = rightX + 'px';
+    specEl.style.top = y + 'px';
+
+    const rowHeight = Math.max(sourceEl.offsetHeight, specEl.offsetHeight);
+    y += rowHeight + GAP;
+  });
+
+  // Unpaired sources in left column
+  GROUPS.unpaired_sources.forEach(file => {
+    const el = document.getElementById('card-' + file.id);
+    if (!el) return;
+    el.style.left = leftX + 'px';
+    el.style.top = y + 'px';
+    y += el.offsetHeight + GAP;
+  });
+
+  // Unpaired specs in right column
+  let specY = y;
+  GROUPS.unpaired_specs.forEach(file => {
+    const el = document.getElementById('card-' + file.id);
+    if (!el) return;
+    el.style.left = rightX + 'px';
+    el.style.top = specY + 'px';
+    specY += el.offsetHeight + GAP;
+  });
+
+  // Size the canvas
+  const maxY = Math.max(y, specY);
+  document.getElementById('canvasInner').style.minHeight = (maxY + 200) + 'px';
+  document.getElementById('canvasInner').style.minWidth = (rightX + CARD_WIDTH + GAP) + 'px';
+
+  // Show all cards
+  document.querySelectorAll('.card').forEach(card => {
+    card.style.visibility = 'visible';
+  });
+
+  storePositions();
 }
 
 // Init
@@ -479,6 +539,7 @@ function toggleContext() {
 }
 
 adjustCanvasTop();
+layoutCards();
 drawConnections();
 window.addEventListener('resize', drawConnections);
 document.querySelectorAll('details').forEach(d => {

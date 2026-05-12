@@ -29,46 +29,13 @@ module Diffmapper
 
     def stats = meta&.dig(:stats) || {}
 
-    def layout
-      @layout ||= compute_layout
-    end
-
-    def compute_layout
-      paired, unpaired_specs, unpaired_sources = group_files
-      positions = {}
-      y = 80
-
-      y = layout_paired(paired, positions, y)
-      y = layout_column(unpaired_sources, positions, y, col: 60)
-      layout_column(unpaired_specs, positions, y, col: 520)
-
-      positions
-    end
-
-    def layout_paired(paired, positions, top)
-      paired.each do |source, spec|
-        positions[source[:id]] = { x: 60, y: top }
-        positions[spec[:id]] = { x: 520, y: top }
-        top += [card_height(source), card_height(spec)].max + 30
-      end
-      top
-    end
-
-    def layout_column(file_list, positions, top, col:)
-      file_list.each do |file|
-        positions[file[:id]] = { x: col, y: top }
-        top += card_height(file) + 30
-      end
-      top
-    end
-
-    def group_files
+    def grouped_files
       specs, sources = files.partition { |f| f[:type] == "spec" }
       paired, matched_ids = build_pairs(specs, sources)
       unpaired_sources = sources.reject { |f| matched_ids[:sources].include?(f[:id]) }
       unpaired_specs = specs.reject { |f| matched_ids[:specs].include?(f[:id]) }
 
-      [paired, unpaired_specs, unpaired_sources]
+      { paired: paired, unpaired_sources: unpaired_sources, unpaired_specs: unpaired_specs }
     end
 
     def build_pairs(specs, sources)
@@ -88,11 +55,13 @@ module Diffmapper
       [source, spec]
     end
 
-    def card_height(file)
-      base = 90
-      base += 20 if file[:summary]
-      base += (file[:details]&.length || 0) * 24
-      base
+    def card_height(_file)
+      # Rough estimate for canvas min-height sizing; JS handles actual layout
+      120
+    end
+
+    def canvas_min_height
+      (files.length * card_height(nil)) + 200
     end
 
     def status_class(file)

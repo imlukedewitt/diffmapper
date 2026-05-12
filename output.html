@@ -294,12 +294,12 @@
 </div>
 
 <div class="canvas" id="canvas">
-  <div class="canvas-inner" id="canvasInner">
+  <div class="canvas-inner" id="canvasInner" style="min-height: 1760px;">
     <svg class="connections" id="connections"></svg>
 
     <div class="card modified"
          id="card-archive_controller"
-         style="left: 60px; top: 80px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-controller">controller</span>
@@ -314,7 +314,7 @@
     </div>
     <div class="card modified"
          id="card-bulk_actions_controller"
-         style="left: 60px; top: 200px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-controller">controller</span>
@@ -329,7 +329,7 @@
     </div>
     <div class="card modified"
          id="card-team_archiver"
-         style="left: 60px; top: 320px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-service">service</span>
@@ -344,7 +344,7 @@
     </div>
     <div class="card modified"
          id="card-archiver"
-         style="left: 60px; top: 440px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-service">service</span>
@@ -359,7 +359,7 @@
     </div>
     <div class="card modified"
          id="card-archivetimeline"
-         style="left: 60px; top: 560px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-component">component</span>
@@ -374,7 +374,7 @@
     </div>
     <div class="card modified"
          id="card-archiveoptions"
-         style="left: 60px; top: 680px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-component">component</span>
@@ -389,7 +389,7 @@
     </div>
     <div class="card modified"
          id="card-index"
-         style="left: 60px; top: 800px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-component">component</span>
@@ -404,7 +404,7 @@
     </div>
     <div class="card modified"
          id="card-archive_controller_spec"
-         style="left: 520px; top: 80px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-spec">spec</span>
@@ -419,7 +419,7 @@
     </div>
     <div class="card modified"
          id="card-bulk_actions_controller_spec"
-         style="left: 520px; top: 200px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-spec">spec</span>
@@ -434,7 +434,7 @@
     </div>
     <div class="card modified"
          id="card-archiving_a_team_project_spec"
-         style="left: 520px; top: 920px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-spec">spec</span>
@@ -449,7 +449,7 @@
     </div>
     <div class="card modified"
          id="card-archive_via_api_with_confirmation_spec"
-         style="left: 520px; top: 1040px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-spec">spec</span>
@@ -464,7 +464,7 @@
     </div>
     <div class="card modified"
          id="card-team_archiver_spec"
-         style="left: 520px; top: 320px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-spec">spec</span>
@@ -479,7 +479,7 @@
     </div>
     <div class="card modified"
          id="card-archiver_spec"
-         style="left: 520px; top: 440px;">
+         style="visibility: hidden;">
       <div class="card-header">
         <span class="status-dot modified"></span>
         <span class="file-badge badge-spec">spec</span>
@@ -505,6 +505,10 @@
 
 <script>
 const CONNECTIONS = [{"from":"archive_controller_spec","to":"archive_controller","label":"tests","type":"test"},{"from":"bulk_actions_controller_spec","to":"bulk_actions_controller","label":"tests","type":"test"},{"from":"team_archiver_spec","to":"team_archiver","label":"tests","type":"test"},{"from":"archiver_spec","to":"archiver","label":"tests","type":"test"}];
+const GROUPS = {"paired":[[{"id":"archive_controller","path":"app/controllers/team_projects/archive_controller.rb","status":"modified","type":"controller","additions":2,"deletions":1,"hunks":"@@ -83,7 +83,8 @@ class TeamProjects::ArchiveController < ::TeamProjects::BaseController\n       preserve_attachments: boolean_value_of(archive_params[:preserve_attachments]),\n       notify_watchers:\n         boolean_value_of(archive_params[:notify_watchers]),\n-      include_subtasks: boolean_value_of(params[:include_subtasks])\n+      include_subtasks: boolean_value_of(params[:include_subtasks]),\n+      skip_completed_check: boolean_value_of(params[:skip_completed_check])\n     }\n   end\n \n"},{"id":"archive_controller_spec","path":"spec/controllers/team_projects/archive_controller_spec.rb","status":"modified","type":"spec","additions":3,"deletions":1,"hunks":"@@ -120,8 +120,10 @@ RSpec.describe TeamProjects::ArchiveController do\n           expect(service_params).to include(\n             preserve_attachments: false,\n             notify_watchers: true,\n-            include_subtasks: true\n+            include_subtasks: true,\n+            skip_completed_check: false\n           )\n+          expect(service_params).to have_key(:skip_completed_check)\n         end\n       end\n     end\n"}],[{"id":"bulk_actions_controller","path":"app/controllers/tasks/bulk_actions_controller.rb","status":"modified","type":"controller","additions":1,"deletions":0,"hunks":"@@ -92,6 +92,7 @@ class Tasks::BulkActionsController < ApplicationController\n         team_project: @task.team_project,\n         archive: boolean_value_of(params[:archive]),\n         preserve_attachments: boolean_value_of(params[:preserve_attachments]),\n+        skip_completed_check: boolean_value_of(params[:skip_completed_check]),\n       )\n       Adapters::BulkActionsController::TeamArchiverAdapter.new(\n         service: service,\n"},{"id":"bulk_actions_controller_spec","path":"spec/controllers/tasks/bulk_actions_controller_spec.rb","status":"modified","type":"spec","additions":2,"deletions":0,"hunks":"@@ -85,6 +85,8 @@ RSpec.describe Tasks::BulkActionsController do\n           service = instance_double(Tasks::Archiver)\n           expect(Tasks::Archiver).to receive(:new).with(\n             hash_including(\n+              archive: true,\n+              skip_completed_check: false,\n             )\n           ).and_return(service)\n         end\n"}],[{"id":"team_archiver","path":"app/services/team_projects/team_archiver.rb","status":"modified","type":"service","additions":2,"deletions":0,"hunks":"@@ -10,6 +10,7 @@ module TeamProjects\n     attribute :preserve_attachments, Types::Params::Bool.default(false)\n     attribute :notify_watchers, Types::Params::Bool.default(true)\n+    attribute :skip_completed_check, Types::Params::Bool.default(false)\n \n     def call\n       result = process_parent_project\n@@ -42,6 +43,7 @@ module TeamProjects\n           archive: true,\n           preserve_attachments: preserve_attachments,\n+          skip_completed_check: skip_completed_check,\n         )\n       end\n     end\n"},{"id":"team_archiver_spec","path":"spec/services/team_projects/team_archiver_spec.rb","status":"modified","type":"spec","additions":21,"deletions":0,"hunks":"@@ -55,6 +55,26 @@ RSpec.describe TeamProjects::TeamArchiver do\n       end\n     end\n \n+    context \"when skip_completed_check is true\" do\n+      let(:params) { default_params.merge(skip_completed_check: true) }\n+\n+      it \"passes skip_completed_check to member archives\" do\n+        result = described_class.new(params).call\n+\n+        expect(result).to be_success\n+        expect(child_project.reload.force_completed?).to be true\n+      end\n+    end\n+\n+    context \"when skip_completed_check is false\" do\n+      let(:params) { default_params.merge(skip_completed_check: false) }\n+\n+      it \"does not skip validation for members\" do\n+        result = described_class.new(params).call\n+\n+        expect(result).to be_success\n+        expect(child_project.reload.force_completed?).to be false\n+      end\n+    end\n   end\n end\n"}],[{"id":"archiver","path":"app/services/tasks/archiver.rb","status":"modified","type":"service","additions":17,"deletions":1,"hunks":"@@ -8,7 +8,7 @@ module Tasks\n     attribute :task, Types.Instance(Task)\n     attribute :archive, Types::Params::Bool.default(false)\n     attribute :preserve_attachments, Types::Params::Bool.default(false)\n-\n+    attribute :skip_completed_check, Types::Params::Bool.default(false)\n \n     def call\n       return failure(\"Task cannot be archived\") unless task.archivable?\n@@ -30,6 +31,22 @@ module Tasks\n         task.update!(status: :archived, archived_at: Time.current)\n       end\n \n+      def maybe_skip_validation\n+        return unless skip_completed_check\n+        return unless incomplete_subtasks?\n+\n+        task.subtasks.incomplete.each do |subtask|\n+          subtask.force_complete!\n+        end\n+      end\n+\n+      def incomplete_subtasks?\n+        return false if task.team_project.blank?\n+        return false if task.standalone?\n+\n+        task.subtasks.incomplete.exists?\n+      end\n+\n       def process_archive\n         ActiveRecord::Base.transaction do\n           validate_task!\n"},{"id":"archiver_spec","path":"spec/services/tasks/archiver/archiver_spec.rb","status":"modified","type":"spec","additions":41,"deletions":0,"hunks":"@@ -80,6 +80,43 @@ RSpec.describe Tasks::Archiver do\n       end\n     end\n \n+    context \"with skip_completed_check\" do\n+      let(:task) { create(:task, :child, team_project: team_project) }\n+      let(:product) { create(:product, :allows_skip_check) }\n+\n+      context \"when true and eligible\" do\n+        let(:params) { default_params.merge(skip_completed_check: true) }\n+\n+        it \"force completes incomplete subtasks\" do\n+          result = described_class.new(params).call\n+\n+          expect(result).to be_success\n+          expect(task.reload.subtasks).to all(\n+            have_attributes(force_completed: true)\n+          )\n+        end\n+      end\n+\n+      context \"when true but not eligible (parent task)\" do\n+        let(:task) { create(:task, :parent, team_project: team_project) }\n+        let(:params) { default_params.merge(skip_completed_check: true) }\n+\n+        it \"does not force complete\" do\n+          result = described_class.new(params).call\n+\n+          expect(result).to be_success\n+          expect(task.reload.subtasks).to all(\n+            have_attributes(force_completed: false)\n+          )\n+        end\n+      end\n+\n+      context \"when false\" do\n+        let(:params) { default_params.merge(skip_completed_check: false) }\n+\n+        it \"does not force complete\" do\n+          result = described_class.new(params).call\n+\n+          expect(result).to be_success\n+        end\n+      end\n+    end\n   end\n end\n"}]],"unpaired_sources":[{"id":"archivetimeline","path":"frontend/js/ProjectArchive/ArchiveTimeline.js","status":"modified","type":"component","additions":3,"deletions":0,"hunks":"@@ -15,6 +15,9 @@ const ArchiveTimeline = ({ project, options, onUpdate }) => {\n   const [selectedDate, setSelectedDate] = useState(null);\n   const [showOptions, setShowOptions] = useState(false);\n \n+  const isParentProject = project.id === project.teamProjectParentId;\n+  const showSkipCheck = !isParentProject && options.hasIncompleteSubtasks;\n+\n   return (\n     <div className=\"archive-timeline\">\n       <TimelineSelector\n"},{"id":"archiveoptions","path":"frontend/js/ProjectArchive/ArchiveOptions.js","status":"modified","type":"component","additions":16,"deletions":1,"hunks":"@@ -1,7 +1,7 @@\n import React from 'react';\n import PropTypes from 'prop-types';\n \n-const ArchiveOptions = ({ options, onChange }) => {\n+const ArchiveOptions = ({ options, onChange, showSkipCheck }) => {\n   return (\n     <div className=\"archive-options\">\n       <label>\n@@ -18,6 +18,19 @@ const ArchiveOptions = ({ options, onChange }) => {\n           Preserve attachments\n         </label>\n       </div>\n+      {showSkipCheck && (\n+        <div className=\"option-group\">\n+          <label>\n+            <input\n+              type=\"checkbox\"\n+              checked={options.skipCompletedCheck}\n+              onChange={(e) => onChange({\n+                ...options,\n+                skipCompletedCheck: e.target.checked,\n+              })}\n+            />\n+            Skip completion check\n+          </label>\n+        </div>\n+      )}\n     </div>\n   );\n };\n"},{"id":"index","path":"frontend/js/ProjectArchive/index.js","status":"modified","type":"component","additions":1,"deletions":0,"hunks":"@@ -45,6 +45,7 @@ const ProjectArchive = ({ project }) => {\n           <ArchiveOptions\n             options={archiveOptions}\n             onChange={setArchiveOptions}\n+            showSkipCheck={showSkipCheck}\n           />\n         )}\n       </div>\n"}],"unpaired_specs":[{"id":"archiving_a_team_project_spec","path":"spec/features/projects/archiving/archiving_a_team_project_spec.rb","status":"modified","type":"spec","additions":34,"deletions":0,"hunks":"@@ -45,6 +45,37 @@ RSpec.describe \"Archiving a team project\", type: :feature do\n       expect(page).to have_content(\"Project archived successfully\")\n     end\n   end\n+\n+  context \"when the project is a child of a team project\" do\n+    let(:project) { create(:project, :child, team_project: team_project) }\n+\n+    it \"shows the skip check option\" do\n+      visit archive_path(project)\n+\n+      expect(page).to have_content(\"Skip completion check\")\n+    end\n+\n+    it \"hides the skip check option for parent projects\" do\n+      parent = create(:project, :parent, team_project: team_project)\n+      visit archive_path(parent)\n+\n+      expect(page).not_to have_content(\"Skip completion check\")\n+    end\n+\n+    it \"skips check when selected\" do\n+      visit archive_path(project)\n+\n+      check \"Skip completion check\"\n+      click_button \"Archive Project\"\n+\n+      expect(page).to have_content(\"Project archived successfully\")\n+      expect(project.reload.subtasks).to all(\n+        have_attributes(force_completed: true)\n+      )\n+    end\n+\n+    it \"does not skip check by default\" do\n+      visit archive_path(project)\n+      expect(find_field(\"Skip completion check\")).not_to be_checked\n+    end\n+  end\n end\n"},{"id":"archive_via_api_with_confirmation_spec","path":"spec/requests/api/v1/json/team_projects/archive_via_api_with_confirmation_spec.rb","status":"modified","type":"spec","additions":6,"deletions":6,"hunks":"@@ -30,14 +30,14 @@ RSpec.describe \"Team Project Archive via API with Confirmation\" do\n       it \"initiates the archive with confirmation\" do\n         post api_v1_team_project_archive_path(team_project),\n           params: {\n-            archive: true,\n-            preserve_attachments: true\n+            archive: \"true\",\n+            preserve_attachments: \"true\",\n+            skip_completed_check: \"false\"\n           },\n           headers: api_headers\n \n         expect(response).to have_http_status(:ok)\n-        expect(json_response[\"confirmation_token\"]).to be_present\n-        expect(json_response[\"status\"]).to eq(\"pending_confirmation\")\n+        expect(json_response).to include(\"confirmation_token\", \"status\")\n       end\n     end\n \n@@ -50,8 +50,8 @@ RSpec.describe \"Team Project Archive via API with Confirmation\" do\n       it \"completes the archive\" do\n         post complete_api_v1_team_project_archive_path(team_project),\n           params: {\n-            confirmation_token: \"tok_confirm_123\",\n-            confirmed_by: \"user_abc123\"\n+            confirmation_token: \"tok_test_confirm\",\n+            confirmed_by: \"user_test_123\"\n           },\n           headers: api_headers\n \n"}]};
+const CARD_WIDTH = 420;
+const GAP = 40;
+const PAIR_GAP = 60;
 
 // Drag & drop
 let dragCard = null, dragOffsetX = 0, dragOffsetY = 0;
@@ -605,10 +609,13 @@ function toggleConnections() {
 }
 
 // Reset
-const initialPositions = {};
-document.querySelectorAll('.card').forEach(card => {
-  initialPositions[card.id] = { left: card.style.left, top: card.style.top };
-});
+let initialPositions = {};
+
+function storePositions() {
+  document.querySelectorAll('.card').forEach(card => {
+    initialPositions[card.id] = { left: card.style.left, top: card.style.top };
+  });
+}
 
 function resetLayout() {
   document.querySelectorAll('.card').forEach(card => {
@@ -618,6 +625,59 @@ function resetLayout() {
     }
   });
   drawConnections();
+}
+
+// Layout
+function layoutCards() {
+  let y = GAP;
+  const leftX = GAP;
+  const rightX = GAP + CARD_WIDTH + PAIR_GAP;
+
+  // Paired source + spec side by side
+  GROUPS.paired.forEach(([source, spec]) => {
+    const sourceEl = document.getElementById('card-' + source.id);
+    const specEl = document.getElementById('card-' + spec.id);
+    if (!sourceEl || !specEl) return;
+
+    sourceEl.style.left = leftX + 'px';
+    sourceEl.style.top = y + 'px';
+    specEl.style.left = rightX + 'px';
+    specEl.style.top = y + 'px';
+
+    const rowHeight = Math.max(sourceEl.offsetHeight, specEl.offsetHeight);
+    y += rowHeight + GAP;
+  });
+
+  // Unpaired sources in left column
+  GROUPS.unpaired_sources.forEach(file => {
+    const el = document.getElementById('card-' + file.id);
+    if (!el) return;
+    el.style.left = leftX + 'px';
+    el.style.top = y + 'px';
+    y += el.offsetHeight + GAP;
+  });
+
+  // Unpaired specs in right column
+  let specY = y;
+  GROUPS.unpaired_specs.forEach(file => {
+    const el = document.getElementById('card-' + file.id);
+    if (!el) return;
+    el.style.left = rightX + 'px';
+    el.style.top = specY + 'px';
+    specY += el.offsetHeight + GAP;
+  });
+
+  // Size the canvas
+  const maxY = Math.max(y, specY);
+  document.getElementById('canvasInner').style.minHeight = (maxY + 200) + 'px';
+  document.getElementById('canvasInner').style.minWidth = (rightX + CARD_WIDTH + GAP) + 'px';
+
+  // Show all cards
+  document.querySelectorAll('.card').forEach(card => {
+    card.style.visibility = 'visible';
+  });
+
+  storePositions();
 }
 
 // Init
@@ -640,6 +700,7 @@ function toggleContext() {
 }
 
 adjustCanvasTop();
+layoutCards();
 drawConnections();
 window.addEventListener('resize', drawConnections);
 document.querySelectorAll('details').forEach(d => {
