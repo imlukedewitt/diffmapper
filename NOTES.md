@@ -138,3 +138,6 @@ Visual weight (border thickness, size, heat) based on line counts. Spot the core
 
 ### Re-layout after resize
 After expanding diffs or other content that changes card size, provide a way to re-run the layout algorithm to untangle overlapping cards. Could be a button ("Tidy Layout") or automatic.
+
+### Expand all diffs + re-layout
+Button to expand all diffs at once. Should trigger a re-layout afterward so expanded cards don't overlap. Depends on the re-layout feature.
