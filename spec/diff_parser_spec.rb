@@ -47,4 +47,32 @@ RSpec.describe Diffmapper::DiffParser do
   it "includes hunks starting with @@" do
     expect(result[:files].first[:hunks]).to start_with("@@")
   end
+
+  context "with duplicate filenames in different directories" do
+    let(:diff_text) do
+      <<~DIFF
+        diff --git a/app/models/user.rb b/app/models/user.rb
+        index abc..def 100644
+        --- a/app/models/user.rb
+        +++ b/app/models/user.rb
+        @@ -1,3 +1,4 @@
+         class User
+        +  # change
+         end
+        diff --git a/app/models/admin/user.rb b/app/models/admin/user.rb
+        index abc..def 100644
+        --- a/app/models/admin/user.rb
+        +++ b/app/models/admin/user.rb
+        @@ -1,3 +1,4 @@
+         class Admin::User
+        +  # change
+         end
+      DIFF
+    end
+
+    it "deduplicates ids" do
+      ids = result[:files].map { |f| f[:id] }
+      expect(ids).to eq(%w[user user_2])
+    end
+  end
 end

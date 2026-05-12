@@ -25,6 +25,7 @@ module Diffmapper
     private
 
     def parse_files
+      @seen_ids = Hash.new(0)
       split_file_diffs.map { |chunk| parse_file(chunk) }
     end
 
@@ -97,9 +98,11 @@ module Diffmapper
     end
 
     def id_from_path(path)
-      File.basename(path, File.extname(path))
-          .downcase
-          .gsub(/[^a-z0-9]/, "_")
+      id = File.basename(path, File.extname(path))
+               .downcase
+               .gsub(/[^a-z0-9]/, "_")
+      @seen_ids[id] += 1
+      @seen_ids[id] > 1 ? "#{id}_#{@seen_ids[id]}" : id
     end
   end
 end
