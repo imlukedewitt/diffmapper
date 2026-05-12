@@ -135,3 +135,6 @@ Extract `@@ ... @@ def method_name` context lines from hunks and show them on ca
 
 ### Change magnitude visualization
 Visual weight (border thickness, size, heat) based on line counts. Spot the core of a PR at a glance.
+
+### Re-layout after resize
+After expanding diffs or other content that changes card size, provide a way to re-run the layout algorithm to untangle overlapping cards. Could be a button ("Tidy Layout") or automatic.

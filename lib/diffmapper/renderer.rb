@@ -75,5 +75,24 @@ module Diffmapper
     def connections_json
       connections.to_json
     end
+
+    def format_hunks(hunks)
+      hunks.each_line.map { |line| format_diff_line(line) }.join
+    end
+
+    def format_diff_line(line)
+      escaped = ERB::Util.html_escape(line.chomp)
+      css_class = diff_line_class(line)
+      "<span class=\"#{css_class}\">#{escaped}</span>\n"
+    end
+
+    def diff_line_class(line)
+      case line
+      when /^@@/ then "diff-line-hunk"
+      when /^\+/ then "diff-line-add"
+      when /^-/  then "diff-line-del"
+      else "diff-line-ctx"
+      end
+    end
   end
 end

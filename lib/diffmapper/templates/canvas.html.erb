@@ -14,13 +14,13 @@
     --text-dim: #565f89;
     --text-bright: #e0e6ff;
     --green: #9ece6a;
-    --green-bg: rgba(158, 206, 106, 0.08);
+    --green-bg: #1e2718;
     --green-border: rgba(158, 206, 106, 0.5);
     --orange: #e0af68;
-    --orange-bg: rgba(224, 175, 104, 0.08);
+    --orange-bg: #2a2518;
     --orange-border: rgba(224, 175, 104, 0.5);
     --red: #f7768e;
-    --red-bg: rgba(247, 118, 142, 0.08);
+    --red-bg: #2a1a1e;
     --red-border: rgba(247, 118, 142, 0.5);
     --blue: #7aa2f7;
     --purple: #bb9af7;
@@ -216,6 +216,34 @@
   .annotation.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
   .annotation.concern { background: rgba(247,118,142,0.12); border-left: 2px solid var(--red); color: var(--red); }
 
+  .card-diff {
+    margin-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    padding-top: 6px;
+  }
+  .card-diff summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .card-diff summary:hover { color: var(--text); }
+  .diff-content {
+    margin-top: 6px;
+    padding: 8px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .diff-line-add { color: var(--green); }
+  .diff-line-del { color: var(--red); }
+  .diff-line-hunk { color: var(--blue); font-weight: 500; }
+  .diff-line-ctx { color: var(--text-dim); }
+
   .connections line {
     stroke: var(--connection-color);
     stroke-width: 1.5;
@@ -328,6 +356,12 @@
         <%- (file[:annotations] || []).each do |ann| -%>
         <div class="annotation <%= ann[:type] %>"><%= ann[:text] %></div>
         <%- end -%>
+        <%- if file[:hunks] -%>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><%= format_hunks(file[:hunks]) %></pre>
+        </details>
+        <%- end -%>
       </div>
     </div>
     <%- end -%>
@@ -350,10 +384,12 @@ const GAP = 40;
 const PAIR_GAP = 60;
 
 // Drag & drop
-let dragCard = null, dragOffsetX = 0, dragOffsetY = 0;
+let dragCard = null, dragOffsetX = 0, dragOffsetY = 0, topZ = 10;
 
 document.querySelectorAll('.card').forEach(card => {
   card.addEventListener('mousedown', (e) => {
+    topZ++;
+    card.style.zIndex = topZ;
     if (['SUMMARY','BUTTON','TEXTAREA','INPUT'].includes(e.target.tagName)) return;
     dragCard = card;
     dragCard.classList.add('dragging');
@@ -361,7 +397,6 @@ document.querySelectorAll('.card').forEach(card => {
     const canvas = document.getElementById('canvas');
     dragOffsetX = e.clientX - rect.left + canvas.getBoundingClientRect().left - 30 + canvas.scrollLeft;
     dragOffsetY = e.clientY - rect.top + canvas.getBoundingClientRect().top - 30 + canvas.scrollTop;
-    card.style.zIndex = 50;
   });
 });
 
@@ -376,7 +411,8 @@ document.addEventListener('mousemove', (e) => {
 document.addEventListener('mouseup', () => {
   if (dragCard) {
     dragCard.classList.remove('dragging');
-    dragCard.style.zIndex = 10;
+    topZ++;
+    dragCard.style.zIndex = topZ;
     dragCard = null;
   }
 });
