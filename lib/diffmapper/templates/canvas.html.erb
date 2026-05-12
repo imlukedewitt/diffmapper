@@ -182,6 +182,13 @@
   .line-counts .add { color: var(--green); }
   .line-counts .del { color: var(--red); }
 
+  .changed-section {
+    font-size: 11px;
+    color: var(--cyan);
+    padding: 1px 0;
+    font-style: italic;
+  }
+
   .card-summary {
     margin-top: 6px;
     font-size: 12px;
@@ -220,6 +227,8 @@
     margin-top: 8px;
     border-top: 1px solid rgba(255,255,255,0.05);
     padding-top: 6px;
+    max-width: 100%;
+    overflow: hidden;
   }
   .card-diff summary {
     cursor: pointer;
@@ -238,6 +247,8 @@
     overflow-x: auto;
     max-height: 400px;
     overflow-y: auto;
+    white-space: pre;
+    word-break: keep-all;
   }
   .diff-line-add { color: var(--green); }
   .diff-line-del { color: var(--red); }
@@ -348,10 +359,14 @@
         <div class="card-summary"><%= file[:summary] %></div>
         <%- end -%>
         <%- (file[:details] || []).each do |detail| -%>
+        <%- if detail[:description] -%>
         <details class="card-details">
           <summary><%= detail[:label] %></summary>
           <div class="detail-content"><%= detail[:description] %></div>
         </details>
+        <%- else -%>
+        <div class="changed-section"><%= detail[:label] %></div>
+        <%- end -%>
         <%- end -%>
         <%- (file[:annotations] || []).each do |ann| -%>
         <div class="annotation <%= ann[:type] %>"><%= ann[:text] %></div>
@@ -378,7 +393,7 @@
 
 <script>
 const CONNECTIONS = <%= connections_json %>;
-const GROUPS = <%= grouped_files.to_json %>;
+const GROUPS = <%= grouped_files_json %>;
 const CARD_WIDTH = 420;
 const GAP = 40;
 const PAIR_GAP = 60;

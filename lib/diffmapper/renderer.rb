@@ -38,6 +38,15 @@ module Diffmapper
       { paired: paired, unpaired_sources: unpaired_sources, unpaired_specs: unpaired_specs }
     end
 
+    def grouped_files_json
+      groups = grouped_files
+      {
+        paired: groups[:paired].map { |s, t| [{ id: s[:id] }, { id: t[:id] }] },
+        unpaired_sources: groups[:unpaired_sources].map { |f| { id: f[:id] } },
+        unpaired_specs: groups[:unpaired_specs].map { |f| { id: f[:id] } }
+      }.to_json
+    end
+
     def build_pairs(specs, sources)
       matched_ids = { specs: [], sources: [] }
       test_conns = connections.select { |c| c[:type] == "test" }

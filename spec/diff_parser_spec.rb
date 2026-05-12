@@ -75,4 +75,41 @@ RSpec.describe Diffmapper::DiffParser do
       expect(ids).to eq(%w[user user_2])
     end
   end
+
+  describe "details" do
+    it "extracts hunk header context" do
+      details = result[:files].first[:details]
+      expect(details).to eq([{ label: "class User < ApplicationRecord", description: nil }])
+    end
+
+    it "returns empty array when hunk has no context" do
+      new_file = result[:files].find { |f| f[:status] == "new" }
+      expect(new_file[:details]).to be_empty
+    end
+
+    context "with multiple hunk headers" do
+      let(:diff_text) do
+        <<~DIFF
+          diff --git a/app/models/user.rb b/app/models/user.rb
+          index abc..def 100644
+          --- a/app/models/user.rb
+          +++ b/app/models/user.rb
+          @@ -10,7 +10,9 @@ def first_method
+           # context
+          +  # added
+          @@ -30,6 +32,8 @@ def second_method
+           # context
+          +  # added
+        DIFF
+      end
+
+      it "extracts multiple sections" do
+        details = result[:files].first[:details]
+        expect(details).to eq([
+                                { label: "def first_method", description: nil },
+                                { label: "def second_method", description: nil }
+                              ])
+      end
+    end
+  end
 end

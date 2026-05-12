@@ -44,6 +44,7 @@ module Diffmapper
         type: FileClassifier.classify(path),
         additions: additions,
         deletions: deletions,
+        details: build_details(chunk),
         hunks: extract_hunks(chunk)
       }
     end
@@ -95,6 +96,14 @@ module Diffmapper
       return nil unless idx
 
       chunk[idx..]
+    end
+
+    def extract_changed_sections(chunk)
+      chunk.scan(/^@@ .+? @@[ \t]+(.+)$/).flatten.map(&:strip).reject(&:empty?).uniq
+    end
+
+    def build_details(chunk)
+      extract_changed_sections(chunk).map { |section| { label: section, description: nil } }
     end
 
     def id_from_path(path)
