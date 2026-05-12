@@ -1,0 +1,329 @@
+diff --git a/app/controllers/team_projects/archive_controller.rb b/app/controllers/team_projects/archive_controller.rb
+index 1f06d94..26c4ca5 100644
+--- a/app/controllers/team_projects/archive_controller.rb
++++ b/app/controllers/team_projects/archive_controller.rb
+@@ -83,7 +83,8 @@ class TeamProjects::ArchiveController < ::TeamProjects::BaseController
+       preserve_attachments: boolean_value_of(archive_params[:preserve_attachments]),
+       notify_watchers:
+         boolean_value_of(archive_params[:notify_watchers]),
+-      include_subtasks: boolean_value_of(params[:include_subtasks])
++      include_subtasks: boolean_value_of(params[:include_subtasks]),
++      skip_completed_check: boolean_value_of(params[:skip_completed_check])
+     }
+   end
+ 
+diff --git a/app/controllers/tasks/bulk_actions_controller.rb b/app/controllers/tasks/bulk_actions_controller.rb
+index d28b699..58eac63 100644
+--- a/app/controllers/tasks/bulk_actions_controller.rb
++++ b/app/controllers/tasks/bulk_actions_controller.rb
+@@ -92,6 +92,7 @@ class Tasks::BulkActionsController < ApplicationController
+         team_project: @task.team_project,
+         archive: boolean_value_of(params[:archive]),
+         preserve_attachments: boolean_value_of(params[:preserve_attachments]),
++        skip_completed_check: boolean_value_of(params[:skip_completed_check]),
+       )
+       Adapters::BulkActionsController::TeamArchiverAdapter.new(
+         service: service,
+diff --git a/app/services/team_projects/team_archiver.rb b/app/services/team_projects/team_archiver.rb
+index 588dff8..6862447 100644
+--- a/app/services/team_projects/team_archiver.rb
++++ b/app/services/team_projects/team_archiver.rb
+@@ -10,6 +10,7 @@ module TeamProjects
+     attribute :preserve_attachments, Types::Params::Bool.default(false)
+     attribute :notify_watchers, Types::Params::Bool.default(true)
++    attribute :skip_completed_check, Types::Params::Bool.default(false)
+ 
+     def call
+       result = process_parent_project
+@@ -42,6 +43,7 @@ module TeamProjects
+           archive: true,
+           preserve_attachments: preserve_attachments,
++          skip_completed_check: skip_completed_check,
+         )
+       end
+     end
+diff --git a/app/services/tasks/archiver.rb b/app/services/tasks/archiver.rb
+index a1b2c3d..e4f5678 100644
+--- a/app/services/tasks/archiver.rb
++++ b/app/services/tasks/archiver.rb
+@@ -8,7 +8,7 @@ module Tasks
+     attribute :task, Types.Instance(Task)
+     attribute :archive, Types::Params::Bool.default(false)
+     attribute :preserve_attachments, Types::Params::Bool.default(false)
+-
++    attribute :skip_completed_check, Types::Params::Bool.default(false)
+ 
+     def call
+       return failure("Task cannot be archived") unless task.archivable?
+@@ -30,6 +31,22 @@ module Tasks
+         task.update!(status: :archived, archived_at: Time.current)
+       end
+ 
++      def maybe_skip_validation
++        return unless skip_completed_check
++        return unless incomplete_subtasks?
++
++        task.subtasks.incomplete.each do |subtask|
++          subtask.force_complete!
++        end
++      end
++
++      def incomplete_subtasks?
++        return false if task.team_project.blank?
++        return false if task.standalone?
++
++        task.subtasks.incomplete.exists?
++      end
++
+       def process_archive
+         ActiveRecord::Base.transaction do
+           validate_task!
+diff --git a/frontend/js/ProjectArchive/ArchiveTimeline.js b/frontend/js/ProjectArchive/ArchiveTimeline.js
+index abc1234..def5678 100644
+--- a/frontend/js/ProjectArchive/ArchiveTimeline.js
++++ b/frontend/js/ProjectArchive/ArchiveTimeline.js
+@@ -15,6 +15,9 @@ const ArchiveTimeline = ({ project, options, onUpdate }) => {
+   const [selectedDate, setSelectedDate] = useState(null);
+   const [showOptions, setShowOptions] = useState(false);
+ 
++  const isParentProject = project.id === project.teamProjectParentId;
++  const showSkipCheck = !isParentProject && options.hasIncompleteSubtasks;
++
+   return (
+     <div className="archive-timeline">
+       <TimelineSelector
+diff --git a/frontend/js/ProjectArchive/ArchiveOptions.js b/frontend/js/ProjectArchive/ArchiveOptions.js
+index 111aaaa..222bbbb 100644
+--- a/frontend/js/ProjectArchive/ArchiveOptions.js
++++ b/frontend/js/ProjectArchive/ArchiveOptions.js
+@@ -1,7 +1,7 @@
+ import React from 'react';
+ import PropTypes from 'prop-types';
+ 
+-const ArchiveOptions = ({ options, onChange }) => {
++const ArchiveOptions = ({ options, onChange, showSkipCheck }) => {
+   return (
+     <div className="archive-options">
+       <label>
+@@ -18,6 +18,19 @@ const ArchiveOptions = ({ options, onChange }) => {
+           Preserve attachments
+         </label>
+       </div>
++      {showSkipCheck && (
++        <div className="option-group">
++          <label>
++            <input
++              type="checkbox"
++              checked={options.skipCompletedCheck}
++              onChange={(e) => onChange({
++                ...options,
++                skipCompletedCheck: e.target.checked,
++              })}
++            />
++            Skip completion check
++          </label>
++        </div>
++      )}
+     </div>
+   );
+ };
+diff --git a/frontend/js/ProjectArchive/index.js b/frontend/js/ProjectArchive/index.js
+index 333cccc..444dddd 100644
+--- a/frontend/js/ProjectArchive/index.js
++++ b/frontend/js/ProjectArchive/index.js
+@@ -45,6 +45,7 @@ const ProjectArchive = ({ project }) => {
+           <ArchiveOptions
+             options={archiveOptions}
+             onChange={setArchiveOptions}
++            showSkipCheck={showSkipCheck}
+           />
+         )}
+       </div>
+diff --git a/spec/controllers/team_projects/archive_controller_spec.rb b/spec/controllers/team_projects/archive_controller_spec.rb
+index aaa1111..bbb2222 100644
+--- a/spec/controllers/team_projects/archive_controller_spec.rb
++++ b/spec/controllers/team_projects/archive_controller_spec.rb
+@@ -120,8 +120,10 @@ RSpec.describe TeamProjects::ArchiveController do
+           expect(service_params).to include(
+             preserve_attachments: false,
+             notify_watchers: true,
+-            include_subtasks: true
++            include_subtasks: true,
++            skip_completed_check: false
+           )
++          expect(service_params).to have_key(:skip_completed_check)
+         end
+       end
+     end
+diff --git a/spec/controllers/tasks/bulk_actions_controller_spec.rb b/spec/controllers/tasks/bulk_actions_controller_spec.rb
+index ccc3333..ddd4444 100644
+--- a/spec/controllers/tasks/bulk_actions_controller_spec.rb
++++ b/spec/controllers/tasks/bulk_actions_controller_spec.rb
+@@ -85,6 +85,8 @@ RSpec.describe Tasks::BulkActionsController do
+           service = instance_double(Tasks::Archiver)
+           expect(Tasks::Archiver).to receive(:new).with(
+             hash_including(
++              archive: true,
++              skip_completed_check: false,
+             )
+           ).and_return(service)
+         end
+diff --git a/spec/features/projects/archiving/archiving_a_team_project_spec.rb b/spec/features/projects/archiving/archiving_a_team_project_spec.rb
+index eee5555..fff6666 100644
+--- a/spec/features/projects/archiving/archiving_a_team_project_spec.rb
++++ b/spec/features/projects/archiving/archiving_a_team_project_spec.rb
+@@ -45,6 +45,37 @@ RSpec.describe "Archiving a team project", type: :feature do
+       expect(page).to have_content("Project archived successfully")
+     end
+   end
++
++  context "when the project is a child of a team project" do
++    let(:project) { create(:project, :child, team_project: team_project) }
++
++    it "shows the skip check option" do
++      visit archive_path(project)
++
++      expect(page).to have_content("Skip completion check")
++    end
++
++    it "hides the skip check option for parent projects" do
++      parent = create(:project, :parent, team_project: team_project)
++      visit archive_path(parent)
++
++      expect(page).not_to have_content("Skip completion check")
++    end
++
++    it "skips check when selected" do
++      visit archive_path(project)
++
++      check "Skip completion check"
++      click_button "Archive Project"
++
++      expect(page).to have_content("Project archived successfully")
++      expect(project.reload.subtasks).to all(
++        have_attributes(force_completed: true)
++      )
++    end
++
++    it "does not skip check by default" do
++      visit archive_path(project)
++      expect(find_field("Skip completion check")).not_to be_checked
++    end
++  end
+ end
+diff --git a/spec/requests/api/v1/json/team_projects/archive_via_api_with_confirmation_spec.rb b/spec/requests/api/v1/json/team_projects/archive_via_api_with_confirmation_spec.rb
+index ggg7777..hhh8888 100644
+--- a/spec/requests/api/v1/json/team_projects/archive_via_api_with_confirmation_spec.rb
++++ b/spec/requests/api/v1/json/team_projects/archive_via_api_with_confirmation_spec.rb
+@@ -30,14 +30,14 @@ RSpec.describe "Team Project Archive via API with Confirmation" do
+       it "initiates the archive with confirmation" do
+         post api_v1_team_project_archive_path(team_project),
+           params: {
+-            archive: true,
+-            preserve_attachments: true
++            archive: "true",
++            preserve_attachments: "true",
++            skip_completed_check: "false"
+           },
+           headers: api_headers
+ 
+         expect(response).to have_http_status(:ok)
+-        expect(json_response["confirmation_token"]).to be_present
+-        expect(json_response["status"]).to eq("pending_confirmation")
++        expect(json_response).to include("confirmation_token", "status")
+       end
+     end
+ 
+@@ -50,8 +50,8 @@ RSpec.describe "Team Project Archive via API with Confirmation" do
+       it "completes the archive" do
+         post complete_api_v1_team_project_archive_path(team_project),
+           params: {
+-            confirmation_token: "tok_confirm_123",
+-            confirmed_by: "user_abc123"
++            confirmation_token: "tok_test_confirm",
++            confirmed_by: "user_test_123"
+           },
+           headers: api_headers
+ 
+diff --git a/spec/services/team_projects/team_archiver_spec.rb b/spec/services/team_projects/team_archiver_spec.rb
+index iii9999..jjj0000 100644
+--- a/spec/services/team_projects/team_archiver_spec.rb
++++ b/spec/services/team_projects/team_archiver_spec.rb
+@@ -55,6 +55,26 @@ RSpec.describe TeamProjects::TeamArchiver do
+       end
+     end
+ 
++    context "when skip_completed_check is true" do
++      let(:params) { default_params.merge(skip_completed_check: true) }
++
++      it "passes skip_completed_check to member archives" do
++        result = described_class.new(params).call
++
++        expect(result).to be_success
++        expect(child_project.reload.force_completed?).to be true
++      end
++    end
++
++    context "when skip_completed_check is false" do
++      let(:params) { default_params.merge(skip_completed_check: false) }
++
++      it "does not skip validation for members" do
++        result = described_class.new(params).call
++
++        expect(result).to be_success
++        expect(child_project.reload.force_completed?).to be false
++      end
++    end
+   end
+ end
+diff --git a/spec/services/tasks/archiver/archiver_spec.rb b/spec/services/tasks/archiver/archiver_spec.rb
+index kkk1111..lll2222 100644
+--- a/spec/services/tasks/archiver/archiver_spec.rb
++++ b/spec/services/tasks/archiver/archiver_spec.rb
+@@ -80,6 +80,43 @@ RSpec.describe Tasks::Archiver do
+       end
+     end
+ 
++    context "with skip_completed_check" do
++      let(:task) { create(:task, :child, team_project: team_project) }
++      let(:product) { create(:product, :allows_skip_check) }
++
++      context "when true and eligible" do
++        let(:params) { default_params.merge(skip_completed_check: true) }
++
++        it "force completes incomplete subtasks" do
++          result = described_class.new(params).call
++
++          expect(result).to be_success
++          expect(task.reload.subtasks).to all(
++            have_attributes(force_completed: true)
++          )
++        end
++      end
++
++      context "when true but not eligible (parent task)" do
++        let(:task) { create(:task, :parent, team_project: team_project) }
++        let(:params) { default_params.merge(skip_completed_check: true) }
++
++        it "does not force complete" do
++          result = described_class.new(params).call
++
++          expect(result).to be_success
++          expect(task.reload.subtasks).to all(
++            have_attributes(force_completed: false)
++          )
++        end
++      end
++
++      context "when false" do
++        let(:params) { default_params.merge(skip_completed_check: false) }
++
++        it "does not force complete" do
++          result = described_class.new(params).call
++
++          expect(result).to be_success
++        end
++      end
++    end
+   end
+ end
