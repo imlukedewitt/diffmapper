@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "time"
 require_relative "diff_parser"
 require_relative "connection_detector"
 

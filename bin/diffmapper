@@ -3,14 +3,8 @@
 
 require_relative "../lib/diffmapper"
 require_relative "../lib/diffmapper/parser"
+require_relative "../lib/diffmapper/renderer"
+require_relative "../lib/diffmapper/cli"
 require "json"
 
-diff_text = $stdin.read
-
-if diff_text.strip.empty?
-  warn "Usage: git diff --no-ext-diff main...branch | diffmapper parse"
-  exit 1
-end
-
-result = Diffmapper::Parser.new(diff_text).call
-puts JSON.pretty_generate(result)
+Diffmapper::CLI.new(ARGV.dup).run
