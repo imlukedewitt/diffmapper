@@ -28,6 +28,7 @@ module Diffmapper
     def find_source(spec, sources)
       source_path = spec_to_source_path(spec[:path])
       sources.find { |s| s[:path] == source_path } ||
+        sources.find { |s| s[:path] == spec_to_source_path_erb(spec[:path]) } ||
         sources.find { |s| s[:path] == collapse_nested_spec_path(spec[:path]) }
     end
 
@@ -36,6 +37,13 @@ module Diffmapper
         .sub(%r{^spec/}, "app/")
         .sub(/_spec\.rb$/, ".rb")
         .sub(/\.test\.(jsx?|tsx?)$/, '.\1')
+    end
+
+    def spec_to_source_path_erb(path)
+      # spec/views/sites/_site.html.erb_spec.rb → app/views/sites/_site.html.erb
+      path
+        .sub(%r{^spec/}, "app/")
+        .sub(/_spec\.rb$/, "")
     end
 
     def collapse_nested_spec_path(path)

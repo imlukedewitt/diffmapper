@@ -94,4 +94,19 @@ RSpec.describe Diffmapper::ConnectionDetector do
       expect(connections).to be_empty
     end
   end
+
+  context "with an ERB view spec" do
+    let(:files) do
+      [
+        { id: "_site_html", path: "app/views/sites/_site.html.erb", type: "component" },
+        { id: "_site_html_erb_spec", path: "spec/views/sites/_site.html.erb_spec.rb", type: "spec" }
+      ]
+    end
+
+    it "matches erb_spec.rb to .html.erb source" do
+      expect(connections).to eq([
+                                  { from: "_site_html_erb_spec", to: "_site_html", label: "tests", type: "test" }
+                                ])
+    end
+  end
 end
