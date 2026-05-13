@@ -334,4 +334,47 @@ RSpec.describe "Canvas HTML", type: :browser do
       expect(page).not_to have_css("#openQuestions", visible: true)
     end
   end
+
+  context "localStorage persistence" do
+    it "persists a note after adding it" do
+      visit_generated_html
+      first(".add-annotation-btn").click
+      first(".annotation-input").fill_in(with: "Remember this")
+      first(".annotation-save").click
+      expect(page).to have_css(".annotation-item", text: "Remember this")
+
+      # Verify localStorage was written
+      stored = page.evaluate_script("localStorage.getItem(STORAGE_KEY)")
+      expect(stored).to include("Remember this")
+    end
+
+    it "persists reviewed state" do
+      visit_generated_html
+      first(".card-reviewed-check").check
+      stored = page.evaluate_script("localStorage.getItem(STORAGE_KEY)")
+      data = JSON.parse(stored)
+      expect(data["reviewed"]).not_to be_empty
+    end
+
+    it "restores notes on reload" do
+      visit_generated_html
+      first(".add-annotation-btn").click
+      first(".annotation-input").fill_in(with: "Persist me")
+      first(".annotation-save").click
+      expect(page).to have_css(".annotation-item", text: "Persist me")
+
+      # Reload the page
+      visit_generated_html
+      expect(page).to have_css(".annotation-item", text: "Persist me")
+    end
+
+    it "restores reviewed state on reload" do
+      visit_generated_html
+      first(".card-reviewed-check").check
+      expect(page).to have_css(".card.reviewed")
+
+      visit_generated_html
+      expect(page).to have_css(".card.reviewed")
+    end
+  end
 end

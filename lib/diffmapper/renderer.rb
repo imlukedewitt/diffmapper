@@ -29,6 +29,12 @@ module Diffmapper
 
     def stats = meta&.dig(:stats) || {}
 
+    def storage_key
+      branch = meta&.dig(:branch)
+      key = branch || title
+      "diffmapper:#{key}"
+    end
+
     def grouped_files
       specs, sources = files.partition { |f| f[:type] == "spec" }
       paired, matched_ids = build_pairs(specs, sources)

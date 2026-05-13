@@ -665,6 +665,7 @@
   <div class="controls">
     <button onclick="resetLayout()">Reset Layout</button>
     <button onclick="tidyLayout()">Tidy Layout</button>
+    <button onclick="clearSavedState()">Clear Progress</button>
     <button onclick="toggleAllDiffs()">Expand All Diffs</button>
     <button onclick="toggleConnections()">Toggle Lines</button>
   </div>
@@ -799,6 +800,7 @@
 <script>
 const CONNECTIONS = <%= connections_json %>;
 const GROUPS = <%= grouped_files_json %>;
+const STORAGE_KEY = <%= storage_key.to_json %>;
 const CARD_WIDTH = 420;
 const GAP = 40;
 const PAIR_GAP = 60;
@@ -920,6 +922,7 @@ document.addEventListener('mouseup', () => {
     topZ++;
     dragCard.style.zIndex = topZ;
     dragCard = null;
+    saveState();
   }
 });
 
@@ -1012,6 +1015,13 @@ function resetLayout() {
     }
   });
   drawConnections();
+  saveState();
+}
+
+function clearSavedState() {
+  if (!confirm('Clear all review progress (notes, reviewed files, positions)?')) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  location.reload();
 }
 
 // Layout
@@ -1473,6 +1483,7 @@ function deleteAnnotation(btn) {
   btn.closest('.annotation-item').remove();
   updateQuestionCount();
   updateSidebar();
+  saveState();
 }
 
 function toggleResolved(btn) {
@@ -1481,6 +1492,7 @@ function toggleResolved(btn) {
   btn.title = item.classList.contains('resolved') ? 'Mark as open' : 'Mark as resolved';
   updateQuestionCount();
   updateSidebar();
+  saveState();
 }
 
 function saveAnnotation(btn) {
@@ -1525,6 +1537,7 @@ function saveAnnotation(btn) {
   cancelAnnotation(btn);
   updateQuestionCount();
   updateSidebar();
+  saveState();
 }
 
 function updateQuestionCount() {
@@ -1597,6 +1610,7 @@ function toggleTypeFilter(type) {
   }
   applyTypeFilters();
   updateSidebar();
+  saveState();
 }
 
 function applyTypeFilters() {
@@ -1664,6 +1678,7 @@ function toggleReviewed(fileId, checked) {
   }
   syncReviewedState(fileId);
   updateSidebar();
+  saveState();
 }
 
 function toggleCardReviewed(fileId, checked) {
@@ -1674,6 +1689,7 @@ function toggleCardReviewed(fileId, checked) {
   }
   syncReviewedState(fileId);
   updateSidebar();
+  saveState();
 }
 
 function syncReviewedState(fileId) {
@@ -1704,6 +1720,141 @@ function navigateToCard(fileId) {
   }, 2000);
 }
 
+// Persistence
+function saveState() {
+  try {
+    const resolved = [];
+    document.querySelectorAll('.annotation-item.resolved').forEach(el => {
+      const card = el.closest('.card');
+      const text = el.querySelector('.annotation-text')?.textContent || '';
+      if (card) resolved.push({ fileId: card.id.replace('card-', ''), text: text });
+    });
+
+    const annotations = {};
+    document.querySelectorAll('.card').forEach(card => {
+      const fileId = card.id.replace('card-', '');
+      const items = card.querySelectorAll('.annotation-item');
+      if (items.length === 0) return;
+      annotations[fileId] = Array.from(items).map(el => ({
+        type: el.getAttribute('data-annotation-type') || 'note',
+        text: el.querySelector('.annotation-text')?.textContent || '',
+        resolved: el.classList.contains('resolved')
+      }));
+    });
+
+    const positions = {};
+    document.querySelectorAll('.card').forEach(card => {
+      const left = card.style.left;
+      const top = card.style.top;
+      if (left && top) {
+        positions[card.id] = { left, top };
+      }
+    });
+
+    const state = {
+      reviewed: Array.from(reviewedFiles),
+      annotations: annotations,
+      positions: positions,
+      hiddenTypes: Array.from(hiddenTypes)
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    // localStorage may be unavailable
+  }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const state = JSON.parse(raw);
+
+    if (state.reviewed) {
+      state.reviewed.forEach(id => {
+        reviewedFiles.add(id);
+        syncReviewedState(id);
+      });
+    }
+
+    if (state.annotations) {
+      Object.entries(state.annotations).forEach(([fileId, saved]) => {
+        const card = document.getElementById('card-' + fileId);
+        if (!card) return;
+        const list = card.querySelector('.annotations-list');
+        if (!list) return;
+
+        const existing = Array.from(list.querySelectorAll('.annotation-item')).map(el => ({
+          type: el.getAttribute('data-annotation-type') || 'note',
+          text: el.querySelector('.annotation-text')?.textContent || ''
+        }));
+
+        saved.forEach(ann => {
+          const alreadyExists = existing.some(e => e.type === ann.type && e.text === ann.text);
+          if (!alreadyExists) {
+            addAnnotationToDOM(list, ann.type, ann.text, ann.resolved);
+          } else if (ann.resolved) {
+            const match = Array.from(list.querySelectorAll('.annotation-item')).find(el =>
+              el.getAttribute('data-annotation-type') === ann.type &&
+              el.querySelector('.annotation-text')?.textContent === ann.text
+            );
+            if (match && !match.classList.contains('resolved')) {
+              match.classList.add('resolved');
+              const btn = match.querySelector('.annotation-resolve');
+              if (btn) btn.title = 'Mark as open';
+            }
+          }
+        });
+      });
+    }
+
+    if (state.positions) {
+      Object.entries(state.positions).forEach(([cardId, pos]) => {
+        const card = document.getElementById(cardId);
+        if (card) {
+          card.style.left = pos.left;
+          card.style.top = pos.top;
+        }
+      });
+    }
+
+    if (state.hiddenTypes) {
+      state.hiddenTypes.forEach(type => hiddenTypes.add(type));
+      applyTypeFilters();
+    }
+  } catch (e) {
+    // localStorage may be unavailable
+  }
+}
+
+function addAnnotationToDOM(list, annType, text, resolved) {
+  const item = document.createElement('div');
+  item.className = 'annotation-item ' + annType + (resolved ? ' resolved' : '');
+  item.setAttribute('data-annotation-type', annType);
+
+  const textSpan = document.createElement('span');
+  textSpan.className = 'annotation-text';
+  textSpan.contentEditable = 'true';
+  textSpan.textContent = text;
+  item.appendChild(textSpan);
+
+  if (annType === 'question' || annType === 'concern') {
+    const resolveBtn = document.createElement('button');
+    resolveBtn.className = 'annotation-resolve';
+    resolveBtn.textContent = '\u2713';
+    resolveBtn.title = resolved ? 'Mark as open' : 'Mark as resolved';
+    resolveBtn.onclick = () => { toggleResolved(resolveBtn); };
+    item.appendChild(resolveBtn);
+  }
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'annotation-delete';
+  deleteBtn.textContent = '\u00d7';
+  deleteBtn.onclick = () => { deleteAnnotation(deleteBtn); };
+  item.appendChild(deleteBtn);
+
+  list.appendChild(item);
+}
+
 // Init
 function adjustCanvasTop() {
   const bar = document.getElementById('contextBar');
@@ -1726,6 +1877,7 @@ function toggleContext() {
 populateLayoutSettingsInputs(layoutSettings);
 adjustCanvasTop();
 layoutCards();
+loadState();
 drawConnections();
 updateQuestionCount();
 updateSidebar();

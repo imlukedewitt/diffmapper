@@ -178,26 +178,21 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 
 - Expandable inline diffs (click "View diff" on any card)
 - Directory clustering with labels
-- Editable notes/annotations (Note, Question, Concern types)
+- Editable notes/annotations (Note and Question types)
 - LLM-generated summaries, details, annotations (contenteditable)
-- Open questions/concerns count in top bar
+- Open questions count in top bar (clickable → opens sidebar)
+- Resolvable questions (mark as resolved, dims + strikethrough)
 - Tidy Layout button re-runs layout
 - Expand All Diffs toggle with re-layout
 - Dagre-based spatial layout (replaced custom force simulation)
-- Layout tuning panel with copy-to-clipboard
+- Layout tuning panel (collapsible, collapsed by default)
+- Always-visible review sidebar with Files and Questions tabs
+- File review checkboxes (on card header + sidebar, synced)
+- File type filter pills in sidebar (hide/show cards by type)
+- Connection line arrowheads
+- Drag bugfix (cards no longer teleport when scrolled down)
 
 ## Remaining Ideas
-
-### File sidebar / review checklist
-- Sidebar list of all files in the PR (toggleable from the "N files" label in header?)
-- Each file markable as "reviewed" — shows progress through the PR
-- Clicking a file in the list navigates/scrolls to that card on the canvas
-- UX TBD — could be a slide-out panel, popover, or toggle
-
-### Questions/concerns navigator
-- The top bar shows "N Questions" but no way to browse them
-- Need a way to see which cards have questions/concerns and what they say
-- Similar UX to file sidebar — could be a filtered view or separate panel
 
 ### Pathfinding connection lines
 - Lines currently draw straight between cards, going behind other cards
@@ -205,10 +200,10 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Orthogonal routing (right angles) or spline routing that avoids card rects
 - Could use a simple A* or visibility graph on card bounding boxes
 
-### File type filters
-- Toggle pills in sidebar file list to show/hide cards by type (spec, controller, service, etc.)
-- Hiding a type hides both the sidebar entries and the canvas cards
-- Useful for focusing on source files without test noise, or vice versa
+### localStorage persistence
+- Save review progress (checked files, resolved questions) across page reloads
+- Possibly save card positions too
+- Key by PR branch name or file hash
 
 ### Zoom controls
 - Ability to adjust zoom level of the canvas
@@ -221,9 +216,13 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Useful for "painting pictures" — showing how changed code relates to unchanged code
 - Low priority
 
+### Sidebar polish
+- Show full file path (not just filename) — maybe truncated with directory prefix
+- Group by directory with small section headers
+- Sort by review status or type
+
 ### Other
 - Difftastic integration for richer diff display
-- localStorage persistence for notes and card positions
 - Minimap for large PRs
-- Connection line arrowheads for directionality
 - Extract layout JS from ERB into standalone module for unit testing
+- Agent enrichment skill (pi skill that runs parse → enrich → render)
