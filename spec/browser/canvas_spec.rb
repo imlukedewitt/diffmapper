@@ -92,6 +92,14 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(count_card_overlaps).to eq(0)
   end
 
+  it "shows layout tuning controls" do
+    visit_generated_html
+    expect(page).to have_css("#layoutTuner")
+    expect(page).to have_button("Apply Physics")
+    expect(page).to have_button("Reset Defaults")
+    expect(page).to have_button("Copy Settings")
+  end
+
   it "layers connected files top-to-bottom while keeping test pairs horizontal" do
     data = Diffmapper::Parser.new(
       File.read(File.join(__dir__, "../fixtures/diffs/real_pr.diff"))
@@ -117,7 +125,9 @@ RSpec.describe "Canvas HTML", type: :browser do
       "bulk_actions_controller_spec",
       "archivetimeline",
       "archiveoptions",
-      "index"
+      "index",
+      "archive_via_api_with_confirmation_spec",
+      "archiving_a_team_project_spec"
     )
 
     expect(positions["team_archiver"]["top"]).to be > positions["archive_controller"]["top"]
@@ -126,6 +136,11 @@ RSpec.describe "Canvas HTML", type: :browser do
 
     expect(positions["archivetimeline"]["top"]).to be < positions["archiveoptions"]["top"]
     expect(positions["archiveoptions"]["top"]).to be < positions["index"]["top"]
+
+    expect(positions["archivetimeline"]["top"]).to be > positions["archive_controller"]["top"]
+    expect(positions["archive_via_api_with_confirmation_spec"]["top"]).to be > positions["archive_controller"]["top"]
+    expect(positions["archiving_a_team_project_spec"]["top"]).to be > positions["archive_controller"]["top"]
+    expect(positions["archiving_a_team_project_spec"]["top"]).to be > positions["archive_via_api_with_confirmation_spec"]["top"]
 
     expect(positions["archive_controller_spec"]["left"]).to be > positions["archive_controller"]["left"]
     expect((positions["archive_controller_spec"]["top"] - positions["archive_controller"]["top"]).abs).to be < 20

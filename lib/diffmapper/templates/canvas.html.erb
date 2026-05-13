@@ -429,6 +429,70 @@
     font-family: inherit;
   }
   .context-toggle:hover { color: var(--text); }
+
+  .layout-tuner {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    width: 240px;
+    z-index: 90;
+    background: rgba(36, 40, 59, 0.96);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  .layout-tuner-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+  }
+  .layout-tuner-grid {
+    display: grid;
+    grid-template-columns: 1fr 86px;
+    gap: 6px 8px;
+    align-items: center;
+  }
+  .layout-tuner-grid label {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .layout-tuner-grid input {
+    width: 100%;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: inherit;
+  }
+  .layout-tuner-actions {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .layout-tuner-actions button {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .layout-tuner-actions button:hover {
+    background: var(--border);
+  }
+  .layout-tuner-status {
+    margin-top: 8px;
+    min-height: 14px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
 </style>
 </head>
 <body>
@@ -533,6 +597,38 @@
   <div style="font-size: 10px; color: var(--text-dim);">Drag cards to rearrange</div>
 </div>
 
+<div class="layout-tuner" id="layoutTuner">
+  <div class="layout-tuner-header">Physics tuning</div>
+  <div class="layout-tuner-grid">
+    <label for="setting-iterations">Iterations</label>
+    <input id="setting-iterations" type="number" min="1" step="1">
+
+    <label for="setting-repulsion">Repulsion</label>
+    <input id="setting-repulsion" type="number" min="0" step="1000">
+
+    <label for="setting-attraction">Attraction</label>
+    <input id="setting-attraction" type="number" min="0" step="0.001">
+
+    <label for="setting-directional-bias">Directional bias</label>
+    <input id="setting-directional-bias" type="number" min="0" step="0.005">
+
+    <label for="setting-damping">Damping</label>
+    <input id="setting-damping" type="number" min="0" step="0.05">
+
+    <label for="setting-min-dist">Min distance</label>
+    <input id="setting-min-dist" type="number" min="0" step="1">
+
+    <label for="setting-gravity">Gravity</label>
+    <input id="setting-gravity" type="number" min="0" step="0.0001">
+  </div>
+  <div class="layout-tuner-actions">
+    <button onclick="applyLayoutSettings()">Apply Physics</button>
+    <button onclick="resetLayoutSettings()">Reset Defaults</button>
+    <button onclick="copyLayoutSettings()">Copy Settings</button>
+  </div>
+  <div class="layout-tuner-status" id="layoutTunerStatus"></div>
+</div>
+
 <script>
 const CONNECTIONS = <%= connections_json %>;
 const GROUPS = <%= grouped_files_json %>;
@@ -540,6 +636,16 @@ const CARD_WIDTH = 420;
 const GAP = 40;
 const PAIR_GAP = 60;
 const FILES_BY_ID = buildFileLookup();
+const DEFAULT_LAYOUT_SETTINGS = Object.freeze({
+  iterations: 120,
+  repulsion: 60000,
+  attraction: 0.004,
+  directionalBias: 0.02,
+  damping: 0.75,
+  minDist: 30,
+  gravity: 0.0005
+});
+let layoutSettings = { ...DEFAULT_LAYOUT_SETTINGS };
 
 function buildFileLookup() {
   const files = [
@@ -553,6 +659,73 @@ function buildFileLookup() {
 
 function fileMeta(id) {
   return FILES_BY_ID.get(id) || { id: id, type: 'other', dir: 'other' };
+}
+
+function populateLayoutSettingsInputs(settings) {
+  document.getElementById('setting-iterations').value = settings.iterations;
+  document.getElementById('setting-repulsion').value = settings.repulsion;
+  document.getElementById('setting-attraction').value = settings.attraction;
+  document.getElementById('setting-directional-bias').value = settings.directionalBias;
+  document.getElementById('setting-damping').value = settings.damping;
+  document.getElementById('setting-min-dist').value = settings.minDist;
+  document.getElementById('setting-gravity').value = settings.gravity;
+}
+
+function readSettingNumber(id, fallback, minValue = 0) {
+  const value = parseFloat(document.getElementById(id).value);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(minValue, value);
+}
+
+function currentLayoutSettings() {
+  layoutSettings = {
+    iterations: Math.round(readSettingNumber('setting-iterations', DEFAULT_LAYOUT_SETTINGS.iterations, 1)),
+    repulsion: readSettingNumber('setting-repulsion', DEFAULT_LAYOUT_SETTINGS.repulsion, 0),
+    attraction: readSettingNumber('setting-attraction', DEFAULT_LAYOUT_SETTINGS.attraction, 0),
+    directionalBias: readSettingNumber('setting-directional-bias', DEFAULT_LAYOUT_SETTINGS.directionalBias, 0),
+    damping: readSettingNumber('setting-damping', DEFAULT_LAYOUT_SETTINGS.damping, 0),
+    minDist: readSettingNumber('setting-min-dist', DEFAULT_LAYOUT_SETTINGS.minDist, 0),
+    gravity: readSettingNumber('setting-gravity', DEFAULT_LAYOUT_SETTINGS.gravity, 0)
+  };
+  populateLayoutSettingsInputs(layoutSettings);
+  return layoutSettings;
+}
+
+function setLayoutTunerStatus(message) {
+  document.getElementById('layoutTunerStatus').textContent = message;
+}
+
+function applyLayoutSettings() {
+  currentLayoutSettings();
+  setLayoutTunerStatus('Applied current settings');
+  tidyLayout();
+}
+
+function resetLayoutSettings() {
+  layoutSettings = { ...DEFAULT_LAYOUT_SETTINGS };
+  populateLayoutSettingsInputs(layoutSettings);
+  setLayoutTunerStatus('Reset to defaults');
+  tidyLayout();
+}
+
+async function copyLayoutSettings() {
+  const text = JSON.stringify(currentLayoutSettings(), null, 2);
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+    }
+    setLayoutTunerStatus('Copied settings to clipboard');
+  } catch (error) {
+    setLayoutTunerStatus('Could not copy settings');
+  }
 }
 
 // Drag & drop
@@ -711,32 +884,39 @@ function seedByConnectedComponents() {
   const units = buildLayoutUnits(nodeMap);
   const edges = buildLayoutEdges(nodeMap, units);
   const components = buildLayoutComponents(units, edges);
-  const MAX_ROW_WIDTH = 2800;
+  const zones = buildComponentZones(components);
+  const maxLayoutWidth = preferredLayoutWidth();
 
-  let x = GAP;
-  let y = GAP;
+  let zoneX = GAP;
+  let zoneY = GAP;
   let rowHeight = 0;
   let maxX = 0;
+  let maxY = 0;
 
-  components.forEach(component => {
-    layoutComponentAsStory(component);
-
-    if (x > GAP && x + component.w > MAX_ROW_WIDTH) {
-      x = GAP;
-      y += rowHeight + GAP * 3;
+  zones.forEach(zone => {
+    if (zoneX > GAP && zoneX + zone.w > maxLayoutWidth) {
+      zoneX = GAP;
+      zoneY += rowHeight + GAP * 4;
       rowHeight = 0;
     }
 
-    offsetComponent(component, x, y);
-    component.units.forEach(unit => applyUnitPosition(unit));
+    let componentY = zoneY;
+    zone.components.forEach(component => {
+      offsetComponent(component, zoneX, componentY);
+      component.units.forEach(unit => applyUnitPosition(unit));
 
-    maxX = Math.max(maxX, x + component.w);
-    rowHeight = Math.max(rowHeight, component.h);
-    x += component.w + GAP * 3;
+      maxX = Math.max(maxX, zoneX + component.w);
+      maxY = Math.max(maxY, componentY + component.h);
+      componentY += component.h + GAP * 3;
+    });
+
+    rowHeight = Math.max(rowHeight, zone.h);
+    zoneX += zone.w + GAP * 4;
   });
 
-  document.getElementById('canvasInner').style.minHeight = (y + rowHeight + 400) + 'px';
-  document.getElementById('canvasInner').style.minWidth = Math.max(2500, maxX + GAP * 2) + 'px';
+  const viewportWidth = Math.max(window.innerWidth - GAP * 2, 0);
+  document.getElementById('canvasInner').style.minHeight = (maxY + 400) + 'px';
+  document.getElementById('canvasInner').style.minWidth = Math.max(viewportWidth, maxX + GAP * 2) + 'px';
 }
 
 function buildLayoutComponents(units, edges) {
@@ -757,7 +937,43 @@ function buildLayoutComponents(units, edges) {
     grouped.get(componentId).edges.push(edge);
   });
 
-  return Array.from(grouped.values()).sort(compareLayoutComponents);
+  return Array.from(grouped.values())
+    .map(component => {
+      layoutComponentAsStory(component);
+      return component;
+    })
+    .sort(compareLayoutComponents);
+}
+
+function buildComponentZones(components) {
+  const byZone = new Map();
+
+  components.forEach(component => {
+    const zoneId = layoutZoneForComponent(component);
+    if (!byZone.has(zoneId)) byZone.set(zoneId, []);
+    byZone.get(zoneId).push(component);
+  });
+
+  return [0, 1, 2]
+    .filter(zoneId => byZone.has(zoneId))
+    .map(zoneId => {
+      const zoneComponents = byZone.get(zoneId);
+      const zoneHeight = zoneComponents.reduce((sum, component, index) => {
+        const gap = index === 0 ? 0 : GAP * 3;
+        return sum + gap + component.h;
+      }, 0);
+
+      return {
+        id: zoneId,
+        components: zoneComponents,
+        w: Math.max(...zoneComponents.map(component => component.w)),
+        h: zoneHeight
+      };
+    });
+}
+
+function preferredLayoutWidth() {
+  return Math.max(1200, Math.min(window.innerWidth - GAP * 2, 1450));
 }
 
 function buildConnectedComponents(units, edges) {
@@ -971,12 +1187,14 @@ function forceDirectedRefine() {
   units.forEach(u => { u.vx = 0; u.vy = 0; });
 
   // Simulation
-  const ITERATIONS = 120;
-  const REPULSION = 60000;
-  const ATTRACTION = 0.004;
-  const DIRECTIONAL_BIAS = 0.02;
-  const DAMPING = 0.75;
-  const MIN_DIST = 30;
+  const settings = currentLayoutSettings();
+  const ITERATIONS = settings.iterations;
+  const REPULSION = settings.repulsion;
+  const ATTRACTION = settings.attraction;
+  const DIRECTIONAL_BIAS = settings.directionalBias;
+  const DAMPING = settings.damping;
+  const MIN_DIST = settings.minDist;
+  const GRAVITY = settings.gravity;
 
   const cx = units.reduce((s, u) => s + u.x + u.w / 2, 0) / units.length;
   const cy = units.reduce((s, u) => s + u.y + u.h / 2, 0) / units.length;
@@ -1007,8 +1225,8 @@ function forceDirectedRefine() {
 
     // Gentle gravity toward center
     units.forEach(u => {
-      u.vx += (cx - (u.x + u.w / 2)) * 0.0005;
-      u.vy += (cy - (u.y + u.h / 2)) * 0.0005;
+      u.vx += (cx - (u.x + u.w / 2)) * GRAVITY;
+      u.vy += (cy - (u.y + u.h / 2)) * GRAVITY;
     });
 
     // Apply velocities with cooling
@@ -1299,6 +1517,7 @@ function toggleContext() {
   setTimeout(adjustCanvasTop, 220);
 }
 
+populateLayoutSettingsInputs(layoutSettings);
 adjustCanvasTop();
 layoutCards();
 drawConnections();
