@@ -222,7 +222,7 @@ RSpec.describe "Canvas HTML", type: :browser do
       first(".annotation-input").fill_in(with: "Is this safe?")
       first(".annotation-type-select").select("Question")
       first(".annotation-save").click
-      expect(page).to have_css("#openQuestions", text: "1 question")
+      expect(page).to have_css("#openQuestions", text: "1 open question")
     end
 
     it "updates count when question is deleted" do
@@ -231,7 +231,7 @@ RSpec.describe "Canvas HTML", type: :browser do
       first(".annotation-input").fill_in(with: "Is this safe?")
       first(".annotation-type-select").select("Question")
       first(".annotation-save").click
-      expect(page).to have_css("#openQuestions", text: "1 question")
+      expect(page).to have_css("#openQuestions", text: "1 open question")
       first(".annotation-item").hover
       first(".annotation-delete").click
       expect(page).not_to have_css("#openQuestions", visible: true)
@@ -270,6 +270,54 @@ RSpec.describe "Canvas HTML", type: :browser do
       first(".card-details summary").click
       detail = first(".detail-content")
       expect(detail["contenteditable"]).to eq("true")
+    end
+  end
+
+  context "sidebar" do
+    it "opens sidebar when clicking files count" do
+      visit_generated_html
+      find(".files-toggle").click
+      expect(page).to have_css(".sidebar.open")
+      expect(page).to have_css(".sidebar-file-item", minimum: 1)
+    end
+
+    it "navigates to card when clicking a file in sidebar" do
+      visit_generated_html
+      find(".files-toggle").click
+      first(".sidebar-file-item").click
+      # Card should get a highlight outline briefly
+      card = first(".card")
+      expect(card["style"]).to include("outline")
+    end
+
+    it "marks a file as reviewed" do
+      visit_generated_html
+      find(".files-toggle").click
+      first(".file-check").check
+      expect(page).to have_css(".sidebar-file-item.reviewed", minimum: 1)
+    end
+
+    it "closes sidebar when clicking close button" do
+      visit_generated_html
+      find(".files-toggle").click
+      expect(page).to have_css(".sidebar.open")
+      find(".sidebar-close").click
+      expect(page).not_to have_css(".sidebar.open")
+    end
+  end
+
+  context "question resolution" do
+    it "resolves a question and updates count" do
+      visit_generated_html
+      first(".add-annotation-btn").click
+      first(".annotation-input").fill_in(with: "Is this safe?")
+      first(".annotation-type-select").select("Question")
+      first(".annotation-save").click
+      expect(page).to have_css("#openQuestions", text: "1 open question")
+      first(".annotation-item.question").hover
+      first(".annotation-resolve").click
+      expect(page).to have_css(".annotation-item.resolved")
+      expect(page).not_to have_css("#openQuestions", visible: true)
     end
   end
 end

@@ -237,9 +237,10 @@
     border-radius: 4px;
     font-size: 11px;
   }
+  .annotation.note { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
   .annotation.observation { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
   .annotation.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
-  .annotation.concern { background: rgba(247,118,142,0.12); border-left: 2px solid var(--red); color: var(--red); }
+  .annotation.concern { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
 
   .card-annotations {
     margin-top: 8px;
@@ -256,9 +257,25 @@
     align-items: flex-start;
     gap: 4px;
   }
+  .annotation-item.note { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
   .annotation-item.observation { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
   .annotation-item.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
-  .annotation-item.concern { background: rgba(247,118,142,0.12); border-left: 2px solid var(--red); color: var(--red); }
+  .annotation-item.concern { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
+  .annotation-item.resolved { opacity: 0.5; }
+  .annotation-item.resolved .annotation-text { text-decoration: line-through; }
+  .annotation-resolve {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    padding: 0 2px;
+  }
+  .annotation-item:hover .annotation-resolve { opacity: 0.7; }
+  .annotation-resolve:hover { opacity: 1 !important; }
   .annotation-text {
     flex: 1;
     cursor: text;
@@ -431,6 +448,114 @@
   }
   .context-toggle:hover { color: var(--text); }
 
+  .sidebar {
+    position: fixed;
+    top: 46px;
+    right: 0;
+    width: 320px;
+    height: calc(100vh - 46px);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+    font-size: 12px;
+  }
+  .sidebar.open { display: flex; }
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+  }
+  .sidebar-tabs { display: flex; gap: 4px; flex: 1; }
+  .sidebar-tab {
+    padding: 4px 10px;
+    font-size: 11px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .sidebar-tab.active { background: var(--surface-hover); color: var(--text); border-color: var(--text-dim); }
+  .sidebar-tab:hover { color: var(--text); }
+  .sidebar-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .sidebar-close:hover { color: var(--text); }
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .sidebar-file-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+  }
+  .sidebar-file-item:hover { background: var(--surface-hover); }
+  .sidebar-file-item.reviewed { opacity: 0.5; }
+  .sidebar-file-item .file-check {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--green);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .sidebar-file-item .file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  .sidebar-file-item .file-badge-mini {
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .sidebar-file-item .question-indicator {
+    font-size: 10px;
+    color: var(--blue);
+    flex-shrink: 0;
+  }
+  .sidebar-file-item.has-new { border-left-color: var(--green); }
+  .sidebar-file-item.has-modified { border-left-color: var(--orange); }
+  .sidebar-file-item.has-deleted { border-left-color: var(--red); }
+  .sidebar-question-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+  }
+  .sidebar-question-item:hover { background: var(--surface-hover); }
+  .sidebar-question-item.resolved { opacity: 0.5; }
+  .sidebar-question-item .sq-file {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sidebar-question-item .sq-text {
+    color: var(--blue);
+    font-size: 11px;
+  }
+  .sidebar-question-item.resolved .sq-text { text-decoration: line-through; color: var(--text-dim); }
+
   .layout-tuner {
     position: fixed;
     left: 16px;
@@ -503,7 +628,7 @@
   <div class="stats">
     <span class="additions">+<%= stats[:additions] || 0 %></span>
     <span class="deletions">-<%= stats[:deletions] || 0 %></span>
-    <span><%= stats[:files] || 0 %> files</span>
+    <span class="files-toggle" onclick="toggleSidebar('files')" style="cursor:pointer;"><%= stats[:files] || 0 %> files</span>
   </div>
   <%- if context && context[:description] -%>
   <button class="context-toggle" onclick="toggleContext()" id="contextToggle">▸ Details</button>
@@ -524,9 +649,26 @@
   <%- end -%>
 </div>
 
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-tabs">
+      <button class="sidebar-tab active" data-tab="files" onclick="switchSidebarTab('files')">Files</button>
+      <button class="sidebar-tab" data-tab="questions" onclick="switchSidebarTab('questions')">Questions</button>
+    </div>
+    <button class="sidebar-close" onclick="closeSidebar()">&times;</button>
+  </div>
+  <div class="sidebar-content" id="sidebarContent"></div>
+</div>
+
 <div class="canvas" id="canvas">
   <div class="canvas-inner" id="canvasInner" style="min-height: <%= canvas_min_height %>px;">
-    <svg class="connections" id="connections"></svg>
+    <svg class="connections" id="connections">
+      <defs>
+        <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="var(--connection-color)" />
+        </marker>
+      </defs>
+    </svg>
 
     <%- files.each do |file| -%>
     <div class="card <%= status_class(file) %>"
@@ -560,6 +702,9 @@
             <%- (file[:annotations] || []).each do |ann| -%>
             <div class="annotation-item <%= ann[:type] %>" data-annotation-type="<%= ann[:type] %>">
               <span class="annotation-text" contenteditable="true"><%= ann[:text] %></span>
+              <%- if ann[:type] == 'question' || ann[:type] == 'concern' -%>
+              <button class="annotation-resolve" title="Mark as resolved" onclick="toggleResolved(this)">✓</button>
+              <%- end -%>
               <button class="annotation-delete" onclick="deleteAnnotation(this)">×</button>
             </div>
             <%- end -%>
@@ -569,9 +714,8 @@
             <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
             <div class="annotation-actions">
               <select class="annotation-type-select">
-                <option value="observation">Observation</option>
+                <option value="note">Note</option>
                 <option value="question">Question</option>
-                <option value="concern">Concern</option>
               </select>
               <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
               <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
@@ -781,7 +925,9 @@ function getCardCenter(id) {
 
 function drawConnections() {
   const svg = document.getElementById('connections');
+  const defs = svg.querySelector('defs');
   svg.innerHTML = '';
+  if (defs) svg.appendChild(defs);
   if (!connectionsVisible) return;
 
   CONNECTIONS.forEach(conn => {
@@ -795,6 +941,7 @@ function drawConnections() {
     line.setAttribute('y1', fromPt.y);
     line.setAttribute('x2', toPt.x);
     line.setAttribute('y2', toPt.y);
+    line.setAttribute('marker-end', 'url(#arrowhead)');
     svg.appendChild(line);
 
     if (conn.label) {
@@ -1290,6 +1437,15 @@ function cancelAnnotation(btn) {
 function deleteAnnotation(btn) {
   btn.closest('.annotation-item').remove();
   updateQuestionCount();
+  updateSidebar();
+}
+
+function toggleResolved(btn) {
+  const item = btn.closest('.annotation-item');
+  item.classList.toggle('resolved');
+  btn.title = item.classList.contains('resolved') ? 'Mark as open' : 'Mark as resolved';
+  updateQuestionCount();
+  updateSidebar();
 }
 
 function saveAnnotation(btn) {
@@ -1313,6 +1469,15 @@ function saveAnnotation(btn) {
   textSpan.textContent = text;
   item.appendChild(textSpan);
 
+  if (annType === 'question') {
+    const resolveBtn = document.createElement('button');
+    resolveBtn.className = 'annotation-resolve';
+    resolveBtn.textContent = '\u2713';
+    resolveBtn.title = 'Mark as resolved';
+    resolveBtn.onclick = () => { toggleResolved(resolveBtn); };
+    item.appendChild(resolveBtn);
+  }
+
   const deleteBtn = document.createElement('button');
   deleteBtn.className = 'annotation-delete';
   deleteBtn.textContent = '\u00d7';
@@ -1321,25 +1486,140 @@ function saveAnnotation(btn) {
 
   list.appendChild(item);
   input.value = '';
-  typeSelect.value = 'observation';
+  typeSelect.value = 'note';
   cancelAnnotation(btn);
   updateQuestionCount();
+  updateSidebar();
 }
 
 function updateQuestionCount() {
-  const questions = document.querySelectorAll('.annotation-item.question');
-  const concerns = document.querySelectorAll('.annotation-item.concern');
+  const allQuestions = document.querySelectorAll('.annotation-item.question, .annotation-item.concern');
+  const openQuestions = Array.from(allQuestions).filter(el => !el.classList.contains('resolved'));
   const counter = document.getElementById('openQuestions');
-  const total = questions.length + concerns.length;
+  const total = openQuestions.length;
   if (total > 0) {
-    const parts = [];
-    if (questions.length > 0) parts.push(questions.length + ' question' + (questions.length > 1 ? 's' : ''));
-    if (concerns.length > 0) parts.push(concerns.length + ' concern' + (concerns.length > 1 ? 's' : ''));
-    counter.textContent = parts.join(', ');
+    counter.textContent = total + ' open question' + (total > 1 ? 's' : '');
     counter.style.display = '';
+    counter.style.cursor = 'pointer';
+    counter.onclick = () => { toggleSidebar('questions'); };
   } else {
     counter.style.display = 'none';
   }
+}
+
+// Sidebar
+let sidebarTab = 'files';
+const reviewedFiles = new Set();
+
+function toggleSidebar(tab) {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar.classList.contains('open') && sidebarTab === tab) {
+    closeSidebar();
+  } else {
+    sidebarTab = tab || 'files';
+    sidebar.classList.add('open');
+    updateSidebarTabs();
+    updateSidebar();
+  }
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+function switchSidebarTab(tab) {
+  sidebarTab = tab;
+  updateSidebarTabs();
+  updateSidebar();
+}
+
+function updateSidebarTabs() {
+  document.querySelectorAll('.sidebar-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === sidebarTab);
+  });
+}
+
+function updateSidebar() {
+  const content = document.getElementById('sidebarContent');
+  if (!content) return;
+  if (sidebarTab === 'files') {
+    renderFilesList(content);
+  } else {
+    renderQuestionsList(content);
+  }
+}
+
+function renderFilesList(container) {
+  const allFiles = Array.from(FILES_BY_ID.values());
+  let html = '';
+  allFiles.forEach(file => {
+    const reviewed = reviewedFiles.has(file.id);
+    const card = document.getElementById('card-' + file.id);
+    const questions = card ? card.querySelectorAll('.annotation-item.question:not(.resolved), .annotation-item.concern:not(.resolved)') : [];
+    const statusClass = file.status === 'new' ? 'has-new' : file.status === 'deleted' ? 'has-deleted' : 'has-modified';
+    const filePath = file.path || file.id;
+    const fileName = filePath.split('/').pop();
+    html += `<div class="sidebar-file-item ${statusClass} ${reviewed ? 'reviewed' : ''}" onclick="navigateToCard('${file.id}')">`;
+    html += `<input type="checkbox" class="file-check" ${reviewed ? 'checked' : ''} onclick="event.stopPropagation(); toggleReviewed('${file.id}', this.checked)">`;
+    html += `<span class="file-name" title="${filePath}">${fileName}</span>`;
+    if (questions.length > 0) {
+      html += `<span class="question-indicator">${questions.length}?</span>`;
+    }
+    html += `</div>`;
+  });
+  container.innerHTML = html;
+}
+
+function renderQuestionsList(container) {
+  const cards = document.querySelectorAll('.card');
+  let html = '';
+  cards.forEach(card => {
+    const questions = card.querySelectorAll('.annotation-item.question, .annotation-item.concern');
+    if (questions.length === 0) return;
+    const fileId = card.id.replace('card-', '');
+    const file = FILES_BY_ID.get(fileId);
+    const fileName = file ? file.path : fileId;
+    questions.forEach(q => {
+      const text = q.querySelector('.annotation-text')?.textContent || '';
+      const resolved = q.classList.contains('resolved');
+      html += `<div class="sidebar-question-item ${resolved ? 'resolved' : ''}" onclick="navigateToCard('${fileId}')">`;
+      html += `<div class="sq-file">${fileName}</div>`;
+      html += `<div class="sq-text">${resolved ? '✓ ' : '? '}${text}</div>`;
+      html += `</div>`;
+    });
+  });
+  if (!html) {
+    html = '<div style="padding: 12px; color: var(--text-dim);">No questions yet</div>';
+  }
+  container.innerHTML = html;
+}
+
+function toggleReviewed(fileId, checked) {
+  if (checked) {
+    reviewedFiles.add(fileId);
+  } else {
+    reviewedFiles.delete(fileId);
+  }
+  updateSidebar();
+}
+
+function navigateToCard(fileId) {
+  const card = document.getElementById('card-' + fileId);
+  if (!card) return;
+  const canvas = document.getElementById('canvas');
+  const cardLeft = parseFloat(card.style.left) || 0;
+  const cardTop = parseFloat(card.style.top) || 0;
+  canvas.scrollTo({
+    left: cardLeft - 100,
+    top: cardTop - 100,
+    behavior: 'smooth'
+  });
+  card.style.outline = '2px solid var(--blue)';
+  card.style.outlineOffset = '4px';
+  setTimeout(() => {
+    card.style.outline = '';
+    card.style.outlineOffset = '';
+  }, 2000);
 }
 
 // Init
