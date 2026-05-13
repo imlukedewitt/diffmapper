@@ -24,9 +24,11 @@ git diff → Parser (deterministic) → JSON → [Agent enrichment] → Renderer
 ### Renderer (`diffmapper render`)
 
 - Takes JSON, produces self-contained HTML file via ERB template
-- JS-based layout: cards rendered hidden, measured, then positioned absolutely
-- Paired source+spec files placed side by side
+- Uses **dagre** (CDN) for directed graph layout within each connected component
+- Test pairs (source+spec) treated as single wide nodes — dagre positions them, renderer places spec to the right of source
+- Zone packing arranges connected components and solo files across the canvas
 - Draggable cards, SVG connection lines, expandable details
+- Layout tuning panel for adjusting dagre settings live (nodesep, ranksep, edgesep, zoneGap)
 - Top bar with title, stats, collapsible context description
 - Tokyo Night color scheme
 
@@ -35,7 +37,7 @@ git diff → Parser (deterministic) → JSON → [Agent enrichment] → Renderer
 ```bash
 diffmapper master...feature                  # Default: preview (parse + render → HTML)
 diffmapper parse master...feature            # Output base JSON
-diffmapper render enriched.json              # Render enriched JSON → HTML
+diffmapper render enriched.json              # Render JSON → HTML
 cat diff.patch | diffmapper                  # Piped input works too
 ```
 
@@ -109,98 +111,85 @@ The LLM enrichment step lives **outside** the tool, as an agent skill. The tool 
 ## Testing
 
 - **RSpec** for all Ruby code (parser, renderer, CLI)
-- **Capybara + Cuprite** for browser tests of generated HTML (planned)
+- **Capybara + Cuprite** for browser tests of generated HTML
 - Fixtures in `spec/fixtures/diffs/`
+- Browser specs cover: no overlapping cards, connected files layered top-to-bottom, test pairs horizontal, tuner panel presence
 
 ## Prototype
 
 `prototype-v1.html` — the original LLM-one-shot proof of concept that inspired this tool. Kept for reference.
 
-## Feature Ideas
+## Spatial Layout Algorithm
 
-### ~~Expandable inline diffs~~ ✅
-Done. Click "View diff" on any card. Color-coded +/- lines, scrollable within the card.
+### How it works (dagre-based)
 
-### ~~Directory clustering~~ ✅
-Done. Cards are grouped by directory with cluster labels (e.g., "Controllers / Team Projects", "Services / Tasks").
+Layout is fully deterministic — same input always produces the same output.
 
-### ~~Notes / annotations (editable)~~ ✅
-Done. Each card has "+ Add note" button. Notes can be typed as Note, Question, or Concern. LLM-generated summaries, details, and annotations are also contenteditable.
+**Step 1: Build layout units**
+- Source+spec pairs become single wide nodes (source left, spec right with PAIR_GAP between)
+- Unpaired files are their own units
+- Each unit carries metadata: `primaryId`, `layoutType`, `dir`
 
-### ~~Open questions in summary~~ ✅
-Done. Question and concern counts appear in the top bar. Updates live as notes are added/deleted.
+**Step 2: Build layout edges**
+- Non-test connections (`calls`, `passes_prop`, etc.) become directed edges between units
+- Test connections are already encoded as rigid pairs, not edges
 
-### ~~Hunk headers on cards~~ ✅
-Done. Merged into `details` field — parser extracts them, LLM can enrich/replace with better descriptions.
+**Step 3: Group into connected components**
+- Flood-fill on the edge graph to find connected components
+- Each component gets its own dagre layout (isolated graphs don't interfere)
 
-### ~~Re-layout after resize~~ ✅
-Done. "Tidy Layout" button re-runs the layout algorithm.
+**Step 4: Dagre layout per component**
+- Each component is fed to dagre as a directed graph
+- dagre assigns ranks (vertical layers) and positions nodes to minimize edge crossings
+- Settings: `rankdir: TB`, `nodesep: 120`, `ranksep: 120`, `edgesep: 120`
+- Single-unit components skip dagre (just placed at 0,0)
 
-### ~~Expand all diffs + re-layout~~ ✅
-Done. "Expand All Diffs" button toggles all diffs open/closed and triggers tidy layout.
+**Step 5: Zone assignment**
+- Components are grouped by type: backend (0), frontend (1), orphan-spec (2)
+- Within each type, connected components and solo components are split into separate zones
+- This prevents a wide connected graph from forcing narrow solo files into the same column
 
-### Remaining ideas
+**Step 6: Zone packing**
+- Zones are placed left-to-right in rows
+- When a zone won't fit horizontally, it wraps to a new row
+- `preferredLayoutWidth` uses `window.innerWidth` (min 1600) so zones can sit side by side
+- `zoneGap` (default 120) controls spacing between zones and between stacked components
+
+**Step 7: Cluster labels + connection lines**
+- Directory-based cluster labels positioned above their node groups
+- SVG connection lines drawn between card edges (not centers)
+
+### Layout tuning panel
+Fixed panel at bottom-left of canvas. Controls:
+- **Node spacing** (`nodesep`) — horizontal gap between nodes in same rank
+- **Rank spacing** (`ranksep`) — vertical gap between ranks
+- **Edge spacing** (`edgesep`) — gap between parallel edges
+- **Zone gap** (`zoneGap`) — space between zones and stacked components
+
+Apply button re-runs layout. Copy Settings button copies current values as JSON for pasting back.
+
+### Key files
+- `lib/diffmapper/templates/canvas.html.erb` — all JS layout code (dagre integration, zone packing, cluster labels, tuner panel)
+- `lib/diffmapper/renderer.rb` — `grouped_files_json` and `file_layout_data` provide metadata to JS
+- `spec/browser/canvas_spec.rb` — browser tests for layout correctness
+- `spec/support/browser_helper.rb` — `count_card_overlaps` and `card_positions` helpers
+
+## Completed Features
+
+- Expandable inline diffs (click "View diff" on any card)
+- Directory clustering with labels
+- Editable notes/annotations (Note, Question, Concern types)
+- LLM-generated summaries, details, annotations (contenteditable)
+- Open questions/concerns count in top bar
+- Tidy Layout button re-runs layout
+- Expand All Diffs toggle with re-layout
+- Dagre-based spatial layout (replaced custom force simulation)
+- Layout tuning panel with copy-to-clipboard
+
+## Remaining Ideas
 - Difftastic integration for richer diff display
 - localStorage persistence for notes and card positions
 - Minimap for large PRs
 - Connection line arrowheads for directionality
-- Zoom in/out support for when the canvas requires scrolling
-
-## Current Work: Spatial Layout Algorithm
-
-The big remaining problem. The canvas should feel like a hand-arranged map, not a grid or column layout. Connected files should cluster, connection lines should be short and not cross, and independent groups should fill available space naturally.
-
-### What we want (reference: user's manual arrangement)
-
-The user manually rearranged the enriched PR canvas to show the ideal layout. Key patterns:
-- **Data flows top-to-bottom** — controllers at top, services below them, following call graph
-- **Test pairs always side by side** — source left, spec right, short "tests" line between them
-- **"calls" connections flow downward** — creating natural reading order
-- **Independent groups (frontend, orphan specs) fill available space** — not forced to a specific position, just placed where there's room
-- **Connection lines are short and don't cross** — this is the most important visual quality
-
-### Approach 1: Two-column seed (original)
-Simple two-column layout: all sources on left at x=60, all specs on right at x=520. Paired files at same Y.
-
-**Good:** Simple, predictable, test pairs always aligned. No overlaps.
-**Bad:** Rigid column layout defeats the purpose of a "canvas". Everything vertical. No spatial organization.
-
-### Approach 2: Directory cluster grid seed + force-directed refinement
-Grouped files by directory into clusters. Placed clusters in a grid pattern (using `Math.sqrt(clusters.length)` columns). Then ran force-directed simulation to refine.
-
-**Good:** Horizontal spread, cluster labels showing file groupings, cards no longer strictly vertical.
-**Bad:** Related clusters (e.g., controllers/team_projects and services/team_projects) ended up on opposite sides of the grid because grid position was based on cluster index, not relationships. Connection lines crossed heavily.
-
-### Approach 3: Call-graph depth seed + force-directed refinement (current)
-Walked the connection graph to assign depth (callers = shallow, callees = deep). Placed nodes at Y positions by depth, spread horizontally within each depth level. Test pairs placed side by side.
-
-**Good:** Directional flow concept is right. Test pairs stay together.
-**Bad:** Most nodes end up at depth 0 because the call graph in a typical diff is sparse (only a few "calls" connections). Result is everything in one horizontal row with a few stragglers below. Long diagonal connection lines.
-
-### Force-directed simulation details (shared across approaches)
-The force sim runs after the initial seed. Current implementation:
-- **Rigid test pairs** — source+spec move as one unit (this works well, keep it)
-- **Rectangle-based repulsion** — uses actual card edge-to-edge distance, strong push when overlapping (this works well, no overlaps in tests)
-- **Attraction along non-test edges** — pulls connected units together
-- **Directional bias on "calls" edges** — biases callers above callees (good concept but weak effect)
-- **Gravity toward center of mass** — prevents drift
-- **Cooling schedule** — force reduces over iterations
-- Parameters: 120 iterations, repulsion=60000, attraction=0.004, directional_bias=0.02
-- Browser test verifies zero card overlaps after layout
-
-### What to try next
-The core issue is the **initial seed determines the topology** and the force sim can only refine locally — it can't fundamentally rearrange which nodes are left vs right of each other. Ideas:
-
-1. **Smarter seed: place connected clusters near each other.** Before laying out individual cards, figure out which clusters are connected and place them adjacently. The grid approach placed them by index; instead, walk the inter-cluster connection graph.
-
-2. **Edge crossing minimization pass.** After the force sim, run a few iterations that specifically detect and reduce edge crossings by swapping node positions.
-
-3. **Layered graph layout (dagre-style).** Assign ranks not just from the call graph but also from directory structure (controllers above services above models). Within each rank, order nodes to minimize crossings. This is more prescriptive but matches how developers think about code.
-
-4. **Hybrid approach.** Use directory clustering for the *general area* (controllers in one zone, services in another, frontend in another) but use the call graph to determine the *order within and between* zones.
-
-### Key files
-- `lib/diffmapper/templates/canvas.html.erb` — all JS layout code lives here (functions: `layoutCards`, `seedByCallGraph`, `forceDirectedRefine`, `buildLayoutUnits`, `buildLayoutEdges`, `applyRepulsion`, `applyAttraction`, `buildClusters`, `repositionClusterLabels`)
-- `lib/diffmapper/renderer.rb` — `grouped_files_json` and `file_layout_data` provide data to the JS layout
-- `spec/browser/canvas_spec.rb` — browser test `"does not have overlapping cards after layout"` verifies no overlaps
-- `spec/support/browser_helper.rb` — `count_card_overlaps` helper measures overlaps via JS evaluation
+- Zoom in/out support
+- Extract layout JS from ERB into standalone module for unit testing
