@@ -516,6 +516,33 @@
     overflow-y: auto;
     padding: 8px 0;
   }
+  .sidebar-progress {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-check-all {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .sidebar-check-all:hover { color: var(--text); border-color: var(--text-dim); }
+  .sidebar-group-header {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding: 10px 12px 4px;
+    letter-spacing: 0.5px;
+  }
   .sidebar-file-item {
     display: flex;
     align-items: center;
@@ -534,11 +561,25 @@
     flex-shrink: 0;
   }
   .sidebar-file-item .file-name {
-    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--text);
+    font-size: 12px;
+  }
+  .sidebar-file-item .file-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+  .sidebar-file-item .file-info {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
   .sidebar-file-item .file-badge-mini {
     font-size: 9px;
@@ -1625,25 +1666,61 @@ function applyTypeFilters() {
 
 function renderFilesList(container) {
   const allFiles = Array.from(FILES_BY_ID.values());
-  let html = '';
-  allFiles.forEach(file => {
-    const type = file.type || 'other';
-    if (hiddenTypes.has(type)) return;
-    const reviewed = reviewedFiles.has(file.id);
-    const card = document.getElementById('card-' + file.id);
-    const questions = card ? card.querySelectorAll('.annotation-item.question:not(.resolved), .annotation-item.concern:not(.resolved)') : [];
-    const statusClass = file.status === 'new' ? 'has-new' : file.status === 'deleted' ? 'has-deleted' : 'has-modified';
-    const filePath = file.path || file.id;
-    const fileName = filePath.split('/').pop();
-    html += `<div class="sidebar-file-item ${statusClass} ${reviewed ? 'reviewed' : ''}" onclick="navigateToCard('${file.id}')">`;
-    html += `<input type="checkbox" class="file-check" ${reviewed ? 'checked' : ''} onclick="event.stopPropagation(); toggleReviewed('${file.id}', this.checked)">`;
-    html += `<span class="file-name" title="${filePath}">${fileName}</span>`;
-    if (questions.length > 0) {
-      html += `<span class="question-indicator">${questions.length}?</span>`;
-    }
-    html += `</div>`;
+  const visibleFiles = allFiles.filter(f => !hiddenTypes.has(f.type || 'other'));
+  const reviewedCount = visibleFiles.filter(f => reviewedFiles.has(f.id)).length;
+
+  let html = `<div class="sidebar-progress">`;
+  html += `<span>${reviewedCount}/${visibleFiles.length} reviewed</span>`;
+  html += `<button class="sidebar-check-all" onclick="toggleAllReviewed()">${reviewedCount === visibleFiles.length ? 'Uncheck all' : 'Check all'}</button>`;
+  html += `</div>`;
+
+  // Group by directory
+  const groups = new Map();
+  visibleFiles.forEach(file => {
+    const dir = file.dir || 'other';
+    if (!groups.has(dir)) groups.set(dir, []);
+    groups.get(dir).push(file);
+  });
+
+  groups.forEach((files, dir) => {
+    html += `<div class="sidebar-group-header">${dir.toUpperCase().replace(/\//g, ' / ')}</div>`;
+    files.forEach(file => {
+      const reviewed = reviewedFiles.has(file.id);
+      const card = document.getElementById('card-' + file.id);
+      const questions = card ? card.querySelectorAll('.annotation-item.question:not(.resolved), .annotation-item.concern:not(.resolved)') : [];
+      const statusClass = file.status === 'new' ? 'has-new' : file.status === 'deleted' ? 'has-deleted' : 'has-modified';
+      const filePath = file.path || file.id;
+      const fileName = filePath.split('/').pop();
+      html += `<div class="sidebar-file-item ${statusClass} ${reviewed ? 'reviewed' : ''}" onclick="navigateToCard('${file.id}')">`;
+      html += `<input type="checkbox" class="file-check" ${reviewed ? 'checked' : ''} onclick="event.stopPropagation(); toggleReviewed('${file.id}', this.checked)">`;
+      html += `<div class="file-info">`;
+      html += `<span class="file-name">${fileName}</span>`;
+      html += `<span class="file-path">${filePath}</span>`;
+      html += `</div>`;
+      if (questions.length > 0) {
+        html += `<span class="question-indicator">${questions.length}?</span>`;
+      }
+      html += `</div>`;
+    });
   });
   container.innerHTML = html;
+}
+
+function toggleAllReviewed() {
+  const allFiles = Array.from(FILES_BY_ID.values());
+  const visibleFiles = allFiles.filter(f => !hiddenTypes.has(f.type || 'other'));
+  const allReviewed = visibleFiles.every(f => reviewedFiles.has(f.id));
+
+  visibleFiles.forEach(f => {
+    if (allReviewed) {
+      reviewedFiles.delete(f.id);
+    } else {
+      reviewedFiles.add(f.id);
+    }
+    syncReviewedState(f.id);
+  });
+  updateSidebar();
+  saveState();
 }
 
 function renderQuestionsList(container) {

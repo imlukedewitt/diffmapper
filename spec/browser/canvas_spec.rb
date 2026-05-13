@@ -318,6 +318,36 @@ RSpec.describe "Canvas HTML", type: :browser do
       # The pill should no longer be active
       expect(page).not_to have_css(".sidebar-filter-pill.active", text: /#{type_name}/i)
     end
+
+    it "shows directory group headers" do
+      visit_generated_html
+      expect(page).to have_css(".sidebar-group-header", minimum: 1)
+    end
+
+    it "shows file path below filename" do
+      visit_generated_html
+      expect(page).to have_css(".sidebar-file-item .file-name", minimum: 1)
+      expect(page).to have_css(".sidebar-file-item .file-path", minimum: 1)
+    end
+
+    it "shows review progress counter" do
+      visit_generated_html
+      expect(page).to have_css(".sidebar-progress", text: /0\/\d+ reviewed/)
+    end
+
+    it "updates progress when marking files reviewed" do
+      visit_generated_html
+      first(".file-check").check
+      expect(page).to have_css(".sidebar-progress", text: /1\/\d+ reviewed/)
+    end
+
+    it "checks all files with check-all button" do
+      visit_generated_html
+      find(".sidebar-check-all").click
+      file_count = all(".sidebar-file-item").count
+      expect(page).to have_css(".sidebar-file-item.reviewed", count: file_count)
+      expect(page).to have_css(".sidebar-progress", text: /#{file_count}\/#{file_count} reviewed/)
+    end
   end
 
   context "question resolution" do
