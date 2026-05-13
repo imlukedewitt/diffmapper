@@ -926,36 +926,38 @@ function packZones(zones, settings) {
   const maxLayoutWidth = preferredLayoutWidth();
   const zoneGap = settings.zoneGap;
 
-  let zoneX = GAP;
-  let zoneY = GAP;
+  let rowX = GAP;
+  let rowY = GAP;
   let rowHeight = 0;
   let maxX = 0;
   let maxY = 0;
 
   zones.forEach(zone => {
-    if (zoneX > GAP && zoneX + zone.w > maxLayoutWidth) {
-      zoneX = GAP;
-      zoneY += rowHeight + zoneGap;
+    if (rowX > GAP && rowX + zone.w > maxLayoutWidth) {
+      rowX = GAP;
+      rowY += rowHeight + zoneGap;
       rowHeight = 0;
     }
 
-    let componentY = zoneY;
-    zone.components.forEach(component => {
-      offsetComponent(component, zoneX, componentY);
-      component.units.forEach(unit => applyUnitPosition(unit));
-
-      maxX = Math.max(maxX, zoneX + component.w);
-      maxY = Math.max(maxY, componentY + component.h);
-      componentY += component.h + zoneGap;
-    });
-
+    placeZone(zone, rowX, rowY, zoneGap);
+    maxX = Math.max(maxX, rowX + zone.w);
+    maxY = Math.max(maxY, rowY + zone.h);
     rowHeight = Math.max(rowHeight, zone.h);
-    zoneX += zone.w + zoneGap;
+    rowX += zone.w + zoneGap;
   });
 
   const viewportWidth = Math.max(window.innerWidth - GAP * 2, 0);
   document.getElementById('canvasInner').style.minHeight = (maxY + 400) + 'px';
   document.getElementById('canvasInner').style.minWidth = Math.max(viewportWidth, maxX + GAP * 2) + 'px';
+}
+
+function placeZone(zone, x, y, zoneGap) {
+  let componentY = y;
+  zone.components.forEach(component => {
+    offsetComponent(component, x, componentY);
+    component.units.forEach(unit => applyUnitPosition(unit));
+    componentY += component.h + zoneGap;
+  });
 }
 
 function buildMeasuredNodeMap(readPositions = true) {
@@ -1009,9 +1011,21 @@ function buildComponentZones(components) {
     byZone.get(zoneId).push(component);
   });
 
-  return [0, 1, 2]
-    .filter(zoneId => byZone.has(zoneId))
-    .map(zoneId => ({ id: zoneId, components: byZone.get(zoneId), w: 0, h: 0 }));
+  const zones = [];
+  [0, 1, 2].filter(zoneId => byZone.has(zoneId)).forEach(zoneId => {
+    const all = byZone.get(zoneId);
+    const connected = all.filter(c => c.edges.length > 0);
+    const solo = all.filter(c => c.edges.length === 0);
+
+    if (connected.length > 0) {
+      zones.push({ id: zoneId, components: connected, w: 0, h: 0 });
+    }
+    if (solo.length > 0) {
+      zones.push({ id: zoneId + 0.5, components: solo, w: 0, h: 0 });
+    }
+  });
+
+  return zones;
 }
 
 function measureZone(zone) {
@@ -1021,7 +1035,7 @@ function measureZone(zone) {
 }
 
 function preferredLayoutWidth() {
-  return Math.max(1200, Math.min(window.innerWidth - GAP * 2, 1450));
+  return Math.max(1600, window.innerWidth - GAP * 2);
 }
 
 function buildConnectedComponents(units, edges) {

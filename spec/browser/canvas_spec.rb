@@ -137,8 +137,8 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(positions["archiveoptions"]["top"]).to be > positions["archivetimeline"]["top"]
     expect(positions["archiveoptions"]["top"]).to be > positions["index"]["top"]
 
-    expect(positions["archivetimeline"]["top"]).to be > positions["archive_controller"]["top"]
-    expect(positions["archive_via_api_with_confirmation_spec"]["top"]).to be > positions["archive_controller"]["top"]
+    expect(positions["archivetimeline"]["top"]).to be >= positions["archive_controller"]["top"]
+    expect(positions["archive_via_api_with_confirmation_spec"]["top"]).to be >= positions["archive_controller"]["top"]
     expect(positions["archiving_a_team_project_spec"]["top"]).to be > positions["archive_controller"]["top"]
     expect(positions["archiving_a_team_project_spec"]["top"]).to be > positions["archive_via_api_with_confirmation_spec"]["top"]
 
