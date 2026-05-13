@@ -87,7 +87,7 @@
 
   .canvas {
     position: absolute;
-    top: 46px; left: 0; right: 0; bottom: 0;
+    top: 46px; left: 0; right: 320px; bottom: 0;
     overflow: auto;
   }
   .canvas.with-context {
@@ -135,6 +135,15 @@
     align-items: flex-start;
     gap: 8px;
   }
+  .card-reviewed-check {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--green);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .card.reviewed { opacity: 0.6; }
 
   .status-dot {
     width: 8px; height: 8px;
@@ -457,7 +466,7 @@
     background: var(--surface);
     border-left: 1px solid var(--border);
     z-index: 200;
-    display: none;
+    display: flex;
     flex-direction: column;
     font-size: 12px;
   }
@@ -482,15 +491,7 @@
   }
   .sidebar-tab.active { background: var(--surface-hover); color: var(--text); border-color: var(--text-dim); }
   .sidebar-tab:hover { color: var(--text); }
-  .sidebar-close {
-    background: none;
-    border: none;
-    color: var(--text-dim);
-    font-size: 18px;
-    cursor: pointer;
-    padding: 0 4px;
-  }
-  .sidebar-close:hover { color: var(--text); }
+
   .sidebar-content {
     flex: 1;
     overflow-y: auto;
@@ -655,7 +656,6 @@
       <button class="sidebar-tab active" data-tab="files" onclick="switchSidebarTab('files')">Files</button>
       <button class="sidebar-tab" data-tab="questions" onclick="switchSidebarTab('questions')">Questions</button>
     </div>
-    <button class="sidebar-close" onclick="closeSidebar()">&times;</button>
   </div>
   <div class="sidebar-content" id="sidebarContent"></div>
 </div>
@@ -675,6 +675,7 @@
          id="card-<%= file[:id] %>"
          style="visibility: hidden;">
       <div class="card-header">
+        <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleCardReviewed('<%= file[:id] %>', this.checked)">
         <span class="status-dot <%= status_class(file) %>"></span>
         <span class="file-badge <%= badge_class(file) %>"><%= file[:type] %></span>
         <span class="filename"><%= file[:path] %></span>
@@ -1185,7 +1186,8 @@ function measureZone(zone) {
 }
 
 function preferredLayoutWidth() {
-  return Math.max(1600, window.innerWidth - GAP * 2);
+  const sidebarWidth = 320;
+  return Math.max(1200, window.innerWidth - sidebarWidth - GAP * 2);
 }
 
 function buildConnectedComponents(units, edges) {
@@ -1512,19 +1514,9 @@ let sidebarTab = 'files';
 const reviewedFiles = new Set();
 
 function toggleSidebar(tab) {
-  const sidebar = document.getElementById('sidebar');
-  if (sidebar.classList.contains('open') && sidebarTab === tab) {
-    closeSidebar();
-  } else {
-    sidebarTab = tab || 'files';
-    sidebar.classList.add('open');
-    updateSidebarTabs();
-    updateSidebar();
-  }
-}
-
-function closeSidebar() {
-  document.getElementById('sidebar').classList.remove('open');
+  sidebarTab = tab || 'files';
+  updateSidebarTabs();
+  updateSidebar();
 }
 
 function switchSidebarTab(tab) {
@@ -1600,7 +1592,27 @@ function toggleReviewed(fileId, checked) {
   } else {
     reviewedFiles.delete(fileId);
   }
+  syncReviewedState(fileId);
   updateSidebar();
+}
+
+function toggleCardReviewed(fileId, checked) {
+  if (checked) {
+    reviewedFiles.add(fileId);
+  } else {
+    reviewedFiles.delete(fileId);
+  }
+  syncReviewedState(fileId);
+  updateSidebar();
+}
+
+function syncReviewedState(fileId) {
+  const card = document.getElementById('card-' + fileId);
+  if (!card) return;
+  const checked = reviewedFiles.has(fileId);
+  card.classList.toggle('reviewed', checked);
+  const checkbox = card.querySelector('.card-reviewed-check');
+  if (checkbox) checkbox.checked = checked;
 }
 
 function navigateToCard(fileId) {
@@ -1646,6 +1658,7 @@ adjustCanvasTop();
 layoutCards();
 drawConnections();
 updateQuestionCount();
+updateSidebar();
 window.addEventListener('resize', drawConnections);
 document.querySelectorAll('details').forEach(d => {
   d.addEventListener('toggle', () => setTimeout(drawConnections, 10));

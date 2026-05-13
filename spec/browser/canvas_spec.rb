@@ -274,35 +274,37 @@ RSpec.describe "Canvas HTML", type: :browser do
   end
 
   context "sidebar" do
-    it "opens sidebar when clicking files count" do
+    it "shows sidebar with file list" do
       visit_generated_html
-      find(".files-toggle").click
-      expect(page).to have_css(".sidebar.open")
+      expect(page).to have_css(".sidebar")
       expect(page).to have_css(".sidebar-file-item", minimum: 1)
     end
 
     it "navigates to card when clicking a file in sidebar" do
       visit_generated_html
-      find(".files-toggle").click
       first(".sidebar-file-item").click
       # Card should get a highlight outline briefly
       card = first(".card")
       expect(card["style"]).to include("outline")
     end
 
-    it "marks a file as reviewed" do
+    it "marks a file as reviewed from sidebar" do
       visit_generated_html
-      find(".files-toggle").click
       first(".file-check").check
       expect(page).to have_css(".sidebar-file-item.reviewed", minimum: 1)
     end
 
-    it "closes sidebar when clicking close button" do
+    it "marks a file as reviewed from card" do
       visit_generated_html
-      find(".files-toggle").click
-      expect(page).to have_css(".sidebar.open")
-      find(".sidebar-close").click
-      expect(page).not_to have_css(".sidebar.open")
+      first(".card-reviewed-check").check
+      expect(page).to have_css(".card.reviewed", minimum: 1)
+      expect(page).to have_css(".sidebar-file-item.reviewed", minimum: 1)
+    end
+
+    it "switches to questions tab" do
+      visit_generated_html
+      find(".sidebar-tab[data-tab='questions']").click
+      expect(page).to have_css(".sidebar-tab[data-tab='questions'].active")
     end
   end
 
