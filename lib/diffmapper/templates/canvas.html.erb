@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><%= title %></title>
+<script src="https://dagrejs.github.io/project/dagre/latest/dagre.min.js"></script>
 <style>
   :root {
     --bg: #1a1b26;
@@ -598,31 +599,22 @@
 </div>
 
 <div class="layout-tuner" id="layoutTuner">
-  <div class="layout-tuner-header">Physics tuning</div>
+  <div class="layout-tuner-header">Layout tuning</div>
   <div class="layout-tuner-grid">
-    <label for="setting-iterations">Iterations</label>
-    <input id="setting-iterations" type="number" min="1" step="1">
+    <label for="setting-nodesep">Node spacing</label>
+    <input id="setting-nodesep" type="number" min="1" step="10">
 
-    <label for="setting-repulsion">Repulsion</label>
-    <input id="setting-repulsion" type="number" min="0" step="1000">
+    <label for="setting-ranksep">Rank spacing</label>
+    <input id="setting-ranksep" type="number" min="1" step="10">
 
-    <label for="setting-attraction">Attraction</label>
-    <input id="setting-attraction" type="number" min="0" step="0.001">
+    <label for="setting-edgesep">Edge spacing</label>
+    <input id="setting-edgesep" type="number" min="1" step="5">
 
-    <label for="setting-directional-bias">Directional bias</label>
-    <input id="setting-directional-bias" type="number" min="0" step="0.005">
-
-    <label for="setting-damping">Damping</label>
-    <input id="setting-damping" type="number" min="0" step="0.05">
-
-    <label for="setting-min-dist">Min distance</label>
-    <input id="setting-min-dist" type="number" min="0" step="1">
-
-    <label for="setting-gravity">Gravity</label>
-    <input id="setting-gravity" type="number" min="0" step="0.0001">
+    <label for="setting-zone-gap">Zone gap</label>
+    <input id="setting-zone-gap" type="number" min="0" step="20">
   </div>
   <div class="layout-tuner-actions">
-    <button onclick="applyLayoutSettings()">Apply Physics</button>
+    <button onclick="applyLayoutSettings()">Apply</button>
     <button onclick="resetLayoutSettings()">Reset Defaults</button>
     <button onclick="copyLayoutSettings()">Copy Settings</button>
   </div>
@@ -637,13 +629,10 @@ const GAP = 40;
 const PAIR_GAP = 60;
 const FILES_BY_ID = buildFileLookup();
 const DEFAULT_LAYOUT_SETTINGS = Object.freeze({
-  iterations: 120,
-  repulsion: 60000,
-  attraction: 0.004,
-  directionalBias: 0.02,
-  damping: 0.75,
-  minDist: 30,
-  gravity: 0.0005
+  nodesep: 60,
+  ranksep: 80,
+  edgesep: 20,
+  zoneGap: 120
 });
 let layoutSettings = { ...DEFAULT_LAYOUT_SETTINGS };
 
@@ -662,13 +651,10 @@ function fileMeta(id) {
 }
 
 function populateLayoutSettingsInputs(settings) {
-  document.getElementById('setting-iterations').value = settings.iterations;
-  document.getElementById('setting-repulsion').value = settings.repulsion;
-  document.getElementById('setting-attraction').value = settings.attraction;
-  document.getElementById('setting-directional-bias').value = settings.directionalBias;
-  document.getElementById('setting-damping').value = settings.damping;
-  document.getElementById('setting-min-dist').value = settings.minDist;
-  document.getElementById('setting-gravity').value = settings.gravity;
+  document.getElementById('setting-nodesep').value = settings.nodesep;
+  document.getElementById('setting-ranksep').value = settings.ranksep;
+  document.getElementById('setting-edgesep').value = settings.edgesep;
+  document.getElementById('setting-zone-gap').value = settings.zoneGap;
 }
 
 function readSettingNumber(id, fallback, minValue = 0) {
@@ -679,13 +665,10 @@ function readSettingNumber(id, fallback, minValue = 0) {
 
 function currentLayoutSettings() {
   layoutSettings = {
-    iterations: Math.round(readSettingNumber('setting-iterations', DEFAULT_LAYOUT_SETTINGS.iterations, 1)),
-    repulsion: readSettingNumber('setting-repulsion', DEFAULT_LAYOUT_SETTINGS.repulsion, 0),
-    attraction: readSettingNumber('setting-attraction', DEFAULT_LAYOUT_SETTINGS.attraction, 0),
-    directionalBias: readSettingNumber('setting-directional-bias', DEFAULT_LAYOUT_SETTINGS.directionalBias, 0),
-    damping: readSettingNumber('setting-damping', DEFAULT_LAYOUT_SETTINGS.damping, 0),
-    minDist: readSettingNumber('setting-min-dist', DEFAULT_LAYOUT_SETTINGS.minDist, 0),
-    gravity: readSettingNumber('setting-gravity', DEFAULT_LAYOUT_SETTINGS.gravity, 0)
+    nodesep: Math.round(readSettingNumber('setting-nodesep', DEFAULT_LAYOUT_SETTINGS.nodesep, 1)),
+    ranksep: Math.round(readSettingNumber('setting-ranksep', DEFAULT_LAYOUT_SETTINGS.ranksep, 1)),
+    edgesep: Math.round(readSettingNumber('setting-edgesep', DEFAULT_LAYOUT_SETTINGS.edgesep, 1)),
+    zoneGap: Math.round(readSettingNumber('setting-zone-gap', DEFAULT_LAYOUT_SETTINGS.zoneGap, 0))
   };
   populateLayoutSettingsInputs(layoutSettings);
   return layoutSettings;
@@ -855,8 +838,124 @@ function layoutCards() {
 
   document.querySelectorAll('.cluster-label').forEach(el => el.remove());
 
-  seedByConnectedComponents();
-  forceDirectedRefine();
+  const settings = currentLayoutSettings();
+  const nodeMap = buildMeasuredNodeMap(false);
+  const units = buildLayoutUnits(nodeMap);
+  const edges = buildLayoutEdges(nodeMap, units);
+  const components = buildLayoutComponents(units, edges);
+  const zones = buildComponentZones(components);
+
+  zones.forEach(zone => {
+    zone.components.forEach(component => {
+      layoutComponentWithDagre(component, settings);
+    });
+    measureZone(zone);
+  });
+
+  packZones(zones, settings);
+
+  const allNodes = Array.from(nodeMap.values());
+  repositionClusterLabels(allNodes.map(n => ({
+    ...n,
+    x: parseFloat(n.el.style.left) || 0,
+    y: parseFloat(n.el.style.top) || 0
+  })));
+
+  storePositions();
+}
+
+function layoutComponentWithDagre(component, settings) {
+  if (component.units.length === 1) {
+    component.units[0].x = 0;
+    component.units[0].y = 0;
+    component.w = component.units[0].w;
+    component.h = component.units[0].h;
+    return;
+  }
+
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({
+    rankdir: 'TB',
+    nodesep: settings.nodesep,
+    ranksep: settings.ranksep,
+    edgesep: settings.edgesep,
+    marginx: 0,
+    marginy: 0
+  });
+  g.setDefaultEdgeLabel(function() { return {}; });
+
+  const unitById = new Map();
+  component.units.forEach(unit => {
+    const id = primaryIdForUnit(unit);
+    unitById.set(id, unit);
+    g.setNode(id, { width: unit.w, height: unit.h });
+  });
+
+  component.edges.forEach(edge => {
+    const sourceId = primaryIdForUnit(edge.source);
+    const targetId = primaryIdForUnit(edge.target);
+    if (unitById.has(sourceId) && unitById.has(targetId)) {
+      g.setEdge(sourceId, targetId);
+    }
+  });
+
+  dagre.layout(g);
+
+  let minX = Infinity;
+  let minY = Infinity;
+  g.nodes().forEach(nodeId => {
+    const pos = g.node(nodeId);
+    const unit = unitById.get(nodeId);
+    if (!unit) return;
+    unit.x = pos.x - unit.w / 2;
+    unit.y = pos.y - unit.h / 2;
+    minX = Math.min(minX, unit.x);
+    minY = Math.min(minY, unit.y);
+  });
+
+  component.units.forEach(unit => {
+    unit.x -= minX;
+    unit.y -= minY;
+  });
+
+  component.w = Math.max(...component.units.map(u => u.x + u.w));
+  component.h = Math.max(...component.units.map(u => u.y + u.h));
+}
+
+function packZones(zones, settings) {
+  const maxLayoutWidth = preferredLayoutWidth();
+  const zoneGap = settings.zoneGap;
+
+  let zoneX = GAP;
+  let zoneY = GAP;
+  let rowHeight = 0;
+  let maxX = 0;
+  let maxY = 0;
+
+  zones.forEach(zone => {
+    if (zoneX > GAP && zoneX + zone.w > maxLayoutWidth) {
+      zoneX = GAP;
+      zoneY += rowHeight + zoneGap;
+      rowHeight = 0;
+    }
+
+    let componentY = zoneY;
+    zone.components.forEach(component => {
+      offsetComponent(component, zoneX, componentY);
+      component.units.forEach(unit => applyUnitPosition(unit));
+
+      maxX = Math.max(maxX, zoneX + component.w);
+      maxY = Math.max(maxY, componentY + component.h);
+      componentY += component.h + zoneGap;
+    });
+
+    rowHeight = Math.max(rowHeight, zone.h);
+    zoneX += zone.w + zoneGap;
+  });
+
+  const viewportWidth = Math.max(window.innerWidth - GAP * 2, 0);
+  document.getElementById('canvasInner').style.minHeight = (maxY + 400) + 'px';
+  document.getElementById('canvasInner').style.minWidth = Math.max(viewportWidth, maxX + GAP * 2) + 'px';
 }
 
 function buildMeasuredNodeMap(readPositions = true) {
@@ -879,45 +978,6 @@ function buildMeasuredNodeMap(readPositions = true) {
   }));
 }
 
-function seedByConnectedComponents() {
-  const nodeMap = buildMeasuredNodeMap(false);
-  const units = buildLayoutUnits(nodeMap);
-  const edges = buildLayoutEdges(nodeMap, units);
-  const components = buildLayoutComponents(units, edges);
-  const zones = buildComponentZones(components);
-  const maxLayoutWidth = preferredLayoutWidth();
-
-  let zoneX = GAP;
-  let zoneY = GAP;
-  let rowHeight = 0;
-  let maxX = 0;
-  let maxY = 0;
-
-  zones.forEach(zone => {
-    if (zoneX > GAP && zoneX + zone.w > maxLayoutWidth) {
-      zoneX = GAP;
-      zoneY += rowHeight + GAP * 4;
-      rowHeight = 0;
-    }
-
-    let componentY = zoneY;
-    zone.components.forEach(component => {
-      offsetComponent(component, zoneX, componentY);
-      component.units.forEach(unit => applyUnitPosition(unit));
-
-      maxX = Math.max(maxX, zoneX + component.w);
-      maxY = Math.max(maxY, componentY + component.h);
-      componentY += component.h + GAP * 3;
-    });
-
-    rowHeight = Math.max(rowHeight, zone.h);
-    zoneX += zone.w + GAP * 4;
-  });
-
-  const viewportWidth = Math.max(window.innerWidth - GAP * 2, 0);
-  document.getElementById('canvasInner').style.minHeight = (maxY + 400) + 'px';
-  document.getElementById('canvasInner').style.minWidth = Math.max(viewportWidth, maxX + GAP * 2) + 'px';
-}
 
 function buildLayoutComponents(units, edges) {
   const componentIds = buildConnectedComponents(units, edges);
@@ -937,12 +997,7 @@ function buildLayoutComponents(units, edges) {
     grouped.get(componentId).edges.push(edge);
   });
 
-  return Array.from(grouped.values())
-    .map(component => {
-      layoutComponentAsStory(component);
-      return component;
-    })
-    .sort(compareLayoutComponents);
+  return Array.from(grouped.values()).sort(compareLayoutComponents);
 }
 
 function buildComponentZones(components) {
@@ -956,20 +1011,13 @@ function buildComponentZones(components) {
 
   return [0, 1, 2]
     .filter(zoneId => byZone.has(zoneId))
-    .map(zoneId => {
-      const zoneComponents = byZone.get(zoneId);
-      const zoneHeight = zoneComponents.reduce((sum, component, index) => {
-        const gap = index === 0 ? 0 : GAP * 3;
-        return sum + gap + component.h;
-      }, 0);
+    .map(zoneId => ({ id: zoneId, components: byZone.get(zoneId), w: 0, h: 0 }));
+}
 
-      return {
-        id: zoneId,
-        components: zoneComponents,
-        w: Math.max(...zoneComponents.map(component => component.w)),
-        h: zoneHeight
-      };
-    });
+function measureZone(zone) {
+  const zoneGap = layoutSettings.zoneGap || 120;
+  zone.w = Math.max(...zone.components.map(c => c.w));
+  zone.h = zone.components.reduce((sum, c, i) => sum + (i > 0 ? zoneGap : 0) + c.h, 0);
 }
 
 function preferredLayoutWidth() {
@@ -1031,106 +1079,16 @@ function componentPrimaryId(component) {
     .sort()[0] || '';
 }
 
-function layoutComponentAsStory(component) {
-  const orderedUnits = buildComponentStoryOrder(component);
-  let y = 0;
-  let maxW = 0;
-
-  orderedUnits.forEach((unit, index) => {
-    unit.x = 0;
-    unit.y = y;
-    maxW = Math.max(maxW, unit.w);
-    y += unit.h;
-    if (index < orderedUnits.length - 1) y += GAP * 2;
-  });
-
-  component.units = orderedUnits;
-  component.w = maxW;
-  component.h = orderedUnits.length === 0 ? 0 : y;
-}
-
-function buildComponentStoryOrder(component) {
-  const adjacency = new Map(component.units.map(unit => [unit, new Set()]));
-  const counts = new Map(component.units.map(unit => [unit, { incoming: 0, outgoing: 0 }]));
-
-  component.edges.forEach(edge => {
-    adjacency.get(edge.source).add(edge.target);
-    adjacency.get(edge.target).add(edge.source);
-    counts.get(edge.source).outgoing += 1;
-    counts.get(edge.target).incoming += 1;
-  });
-
-  const candidates = component.units.filter(unit => adjacency.get(unit).size <= 1);
-  const startPool = candidates.length > 0 ? candidates : component.units;
-  const orderedStartPool = startPool.sort((a, b) => compareTraversalUnits(a, b, adjacency, counts));
-  const visited = new Set();
-  const ordered = [];
-
-  function visit(unit) {
-    if (visited.has(unit)) return;
-
-    visited.add(unit);
-    ordered.push(unit);
-
-    Array.from(adjacency.get(unit))
-      .filter(neighbor => !visited.has(neighbor))
-      .sort((a, b) => compareTraversalUnits(a, b, adjacency, counts))
-      .forEach(visit);
-  }
-
-  orderedStartPool.forEach(visit);
-  component.units
-    .filter(unit => !visited.has(unit))
-    .sort((a, b) => compareTraversalUnits(a, b, adjacency, counts))
-    .forEach(visit);
-
-  return ordered;
-}
-
-function compareTraversalUnits(a, b, adjacency, counts) {
-  const startDelta = traversalStartBucket(a, counts) - traversalStartBucket(b, counts);
-  if (startDelta !== 0) return startDelta;
-
-  const typeDelta = traversalTypeBucket(a) - traversalTypeBucket(b);
-  if (typeDelta !== 0) return typeDelta;
-
-  const degreeDelta = adjacency.get(a).size - adjacency.get(b).size;
-  if (degreeDelta !== 0) return degreeDelta;
-
-  return primaryIdForUnit(a).localeCompare(primaryIdForUnit(b));
-}
-
-function traversalStartBucket(unit, counts) {
-  const count = counts.get(unit) || { incoming: 0, outgoing: 0 };
-
-  if (count.incoming === 0 && count.outgoing > 0) return 0;
-  if (count.outgoing > 0) return 1;
-  if (count.incoming > 0) return 2;
-  return 3;
-}
-
-function traversalTypeBucket(unit) {
-  switch (unit.layoutType) {
-    case 'controller': return 0;
-    case 'component': return 1;
-    case 'service': return 2;
-    case 'job': return 3;
-    case 'model': return 4;
-    case 'serializer': return 5;
-    case 'spec': return 6;
-    default: return 7;
-  }
-}
-
-function primaryIdForUnit(unit) {
-  return unit.primaryId || '';
-}
 
 function offsetComponent(component, offsetX, offsetY) {
   component.units.forEach(unit => {
     unit.x += offsetX;
     unit.y += offsetY;
   });
+}
+
+function primaryIdForUnit(unit) {
+  return unit.primaryId || '';
 }
 
 function buildClusters() {
@@ -1174,96 +1132,6 @@ function formatClusterLabel(dir) {
   ).join(' / ');
 }
 
-function forceDirectedRefine() {
-  const nodeMap = buildMeasuredNodeMap();
-  const allNodes = Array.from(nodeMap.values());
-  if (allNodes.length === 0) return;
-
-  // Build units: pairs become single units, singles are their own unit
-  const units = buildLayoutUnits(nodeMap);
-  const edges = buildLayoutEdges(nodeMap, units);
-
-  // Initialize velocities
-  units.forEach(u => { u.vx = 0; u.vy = 0; });
-
-  // Simulation
-  const settings = currentLayoutSettings();
-  const ITERATIONS = settings.iterations;
-  const REPULSION = settings.repulsion;
-  const ATTRACTION = settings.attraction;
-  const DIRECTIONAL_BIAS = settings.directionalBias;
-  const DAMPING = settings.damping;
-  const MIN_DIST = settings.minDist;
-  const GRAVITY = settings.gravity;
-
-  const cx = units.reduce((s, u) => s + u.x + u.w / 2, 0) / units.length;
-  const cy = units.reduce((s, u) => s + u.y + u.h / 2, 0) / units.length;
-
-  for (let iter = 0; iter < ITERATIONS; iter++) {
-    units.forEach(u => { u.vx = 0; u.vy = 0; });
-
-    // Repulsion between all unit pairs
-    for (let i = 0; i < units.length; i++) {
-      for (let j = i + 1; j < units.length; j++) {
-        applyRepulsion(units[i], units[j], REPULSION, MIN_DIST);
-      }
-    }
-
-    // Attraction along edges + directional bias
-    edges.forEach(e => {
-      applyAttraction(e.source, e.target, ATTRACTION);
-      // For "calls" edges, bias caller above callee
-      if (e.type === 'calls' || e.type === 'passes_prop') {
-        const dy = e.target.y - e.source.y;
-        if (dy < 100) {
-          // Push target down, source up
-          e.source.vy -= DIRECTIONAL_BIAS * (100 - dy);
-          e.target.vy += DIRECTIONAL_BIAS * (100 - dy);
-        }
-      }
-    });
-
-    // Gentle gravity toward center
-    units.forEach(u => {
-      u.vx += (cx - (u.x + u.w / 2)) * GRAVITY;
-      u.vy += (cy - (u.y + u.h / 2)) * GRAVITY;
-    });
-
-    // Apply velocities with cooling
-    const cooling = 1 - (iter / ITERATIONS) * 0.7;
-    units.forEach(u => {
-      u.x += u.vx * DAMPING * cooling;
-      u.y += u.vy * DAMPING * cooling;
-    });
-  }
-
-  // Normalize: shift so minimum x,y is at GAP
-  const minX = Math.min(...units.map(u => u.x));
-  const minY = Math.min(...units.map(u => u.y));
-  const shiftX = GAP - minX;
-  const shiftY = GAP - minY;
-
-  // Apply final positions back to DOM
-  units.forEach(u => {
-    u.x += shiftX;
-    u.y += shiftY;
-    applyUnitPosition(u);
-  });
-
-  // Resize canvas
-  const maxX = Math.max(...units.map(u => u.x + u.w));
-  const maxY = Math.max(...units.map(u => u.y + u.h));
-  document.getElementById('canvasInner').style.minWidth = (maxX + GAP * 2) + 'px';
-  document.getElementById('canvasInner').style.minHeight = (maxY + GAP * 2) + 'px';
-
-  repositionClusterLabels(allNodes.map(n => ({
-    ...n,
-    x: parseFloat(n.el.style.left) || 0,
-    y: parseFloat(n.el.style.top) || 0
-  })));
-
-  storePositions();
-}
 
 function buildLayoutUnits(nodeMap) {
   const units = [];
@@ -1345,47 +1213,6 @@ function applyUnitPosition(unit) {
   }
 }
 
-function applyRepulsion(a, b, strength, minDist) {
-  // Use rectangle edge-to-edge distance, not center-to-center
-  const ax1 = a.x, ay1 = a.y, ax2 = a.x + a.w, ay2 = a.y + a.h;
-  const bx1 = b.x, by1 = b.y, bx2 = b.x + b.w, by2 = b.y + b.h;
-
-  // Separation on each axis (negative = overlapping)
-  const sepX = Math.max(bx1 - ax2, ax1 - bx2);
-  const sepY = Math.max(by1 - ay2, ay1 - by2);
-  const overlapping = sepX < minDist && sepY < minDist;
-
-  // Direction from a center to b center
-  const dx = (a.x + a.w / 2) - (b.x + b.w / 2);
-  const dy = (a.y + a.h / 2) - (b.y + b.h / 2);
-  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-
-  if (overlapping) {
-    // Strong push based on overlap amount
-    const pushX = (minDist - sepX) * (dx >= 0 ? 1 : -1);
-    const pushY = (minDist - sepY) * (dy >= 0 ? 1 : -1);
-    a.vx += pushX * 0.3;
-    a.vy += pushY * 0.3;
-    b.vx -= pushX * 0.3;
-    b.vy -= pushY * 0.3;
-  } else {
-    // Normal distance-based repulsion
-    const force = strength / (dist * dist);
-    a.vx += (dx / dist) * force;
-    a.vy += (dy / dist) * force;
-    b.vx -= (dx / dist) * force;
-    b.vy -= (dy / dist) * force;
-  }
-}
-
-function applyAttraction(a, b, strength) {
-  const dx = (b.x + b.w / 2) - (a.x + a.w / 2);
-  const dy = (b.y + b.h / 2) - (a.y + a.h / 2);
-  a.vx += dx * strength;
-  a.vy += dy * strength;
-  b.vx -= dx * strength;
-  b.vy -= dy * strength;
-}
 
 function repositionClusterLabels(nodes) {
   // Remove old labels and re-add based on where nodes actually ended up

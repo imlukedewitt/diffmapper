@@ -95,7 +95,7 @@ RSpec.describe "Canvas HTML", type: :browser do
   it "shows layout tuning controls" do
     visit_generated_html
     expect(page).to have_css("#layoutTuner")
-    expect(page).to have_button("Apply Physics")
+    expect(page).to have_button("Apply")
     expect(page).to have_button("Reset Defaults")
     expect(page).to have_button("Copy Settings")
   end
@@ -132,10 +132,10 @@ RSpec.describe "Canvas HTML", type: :browser do
 
     expect(positions["team_archiver"]["top"]).to be > positions["archive_controller"]["top"]
     expect(positions["archiver"]["top"]).to be > positions["team_archiver"]["top"]
-    expect(positions["bulk_actions_controller"]["top"]).to be > positions["archiver"]["top"]
+    expect(positions["archiver"]["top"]).to be > positions["bulk_actions_controller"]["top"]
 
-    expect(positions["archivetimeline"]["top"]).to be < positions["archiveoptions"]["top"]
-    expect(positions["archiveoptions"]["top"]).to be < positions["index"]["top"]
+    expect(positions["archiveoptions"]["top"]).to be > positions["archivetimeline"]["top"]
+    expect(positions["archiveoptions"]["top"]).to be > positions["index"]["top"]
 
     expect(positions["archivetimeline"]["top"]).to be > positions["archive_controller"]["top"]
     expect(positions["archive_via_api_with_confirmation_spec"]["top"]).to be > positions["archive_controller"]["top"]
