@@ -188,9 +188,16 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Layout tuning panel (collapsible, collapsed by default)
 - Always-visible review sidebar with Files and Questions tabs
 - File review checkboxes (on card header + sidebar, synced)
+- Sidebar file list with directory grouping, full path, and progress counter
+- Check all / Uncheck all button for bulk review marking
 - File type filter pills in sidebar (hide/show cards by type)
+- localStorage persistence (reviewed files, annotations, positions, filters)
+- Clear Progress button to reset localStorage for current PR
 - Connection line arrowheads
 - Drag bugfix (cards no longer teleport when scrolled down)
+- Agent enrichment skill (`~/.pi/agent/skills/diffmapper-review`)
+- `diffmapper` symlinked to PATH (`~/bin/diffmapper`)
+- ERB view spec connection detection (`_spec.rb` → `.html.erb`)
 
 ## Remaining Ideas
 
@@ -199,11 +206,6 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Want "train tracks" style routing — lines path-find around obstacles
 - Orthogonal routing (right angles) or spline routing that avoids card rects
 - Could use a simple A* or visibility graph on card bounding boxes
-
-### localStorage persistence
-- Save review progress (checked files, resolved questions) across page reloads
-- Possibly save card positions too
-- Key by PR branch name or file hash
 
 ### Zoom controls
 - Ability to adjust zoom level of the canvas
@@ -216,13 +218,14 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Useful for "painting pictures" — showing how changed code relates to unchanged code
 - Low priority
 
-### Sidebar polish
-- Show full file path (not just filename) — maybe truncated with directory prefix
-- Group by directory with small section headers
-- Sort by review status or type
+### Risk/blast radius indicators
+- Agent can set a `risk` field on files during enrichment (`low`, `medium`, `high`)
+- Show as a subtle icon/badge on card and in sidebar file list
+- Absent = unassessed (no indicator shown)
+- Design challenge: must not be confused with git status indicators (green/orange/red)
+- Could use a different visual language: shield icon, text label, or separate axis entirely
 
 ### Other
 - Difftastic integration for richer diff display
 - Minimap for large PRs
 - Extract layout JS from ERB into standalone module for unit testing
-- Agent enrichment skill (pi skill that runs parse → enrich → render)
