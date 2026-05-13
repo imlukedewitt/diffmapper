@@ -491,7 +491,26 @@
   }
   .sidebar-tab.active { background: var(--surface-hover); color: var(--text); border-color: var(--text-dim); }
   .sidebar-tab:hover { color: var(--text); }
-
+  .sidebar-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-filter-pill {
+    padding: 2px 8px;
+    font-size: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    text-transform: uppercase;
+  }
+  .sidebar-filter-pill.active { background: var(--surface-hover); color: var(--text); border-color: var(--text-dim); }
+  .sidebar-filter-pill:hover { color: var(--text); }
   .sidebar-content {
     flex: 1;
     overflow-y: auto;
@@ -533,8 +552,8 @@
     color: var(--blue);
     flex-shrink: 0;
   }
-  .sidebar-file-item.has-new { border-left-color: var(--green); }
-  .sidebar-file-item.has-modified { border-left-color: var(--orange); }
+  .sidebar-file-item.has-new { border-left-color: #73d677; }
+  .sidebar-file-item.has-modified { border-left-color: #f0a020; }
   .sidebar-file-item.has-deleted { border-left-color: var(--red); }
   .sidebar-question-item {
     padding: 8px 12px;
@@ -573,7 +592,15 @@
     font-size: 11px;
     font-weight: 600;
     color: var(--text-bright);
-    margin-bottom: 8px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .layout-tuner-body {
+    display: none;
+    margin-top: 8px;
+  }
+  .layout-tuner.open .layout-tuner-body {
+    display: block;
   }
   .layout-tuner-grid {
     display: grid;
@@ -657,6 +684,7 @@
       <button class="sidebar-tab" data-tab="questions" onclick="switchSidebarTab('questions')">Questions</button>
     </div>
   </div>
+  <div class="sidebar-filters" id="sidebarFilters"></div>
   <div class="sidebar-content" id="sidebarContent"></div>
 </div>
 
@@ -744,26 +772,28 @@
 </div>
 
 <div class="layout-tuner" id="layoutTuner">
-  <div class="layout-tuner-header">Layout tuning</div>
-  <div class="layout-tuner-grid">
-    <label for="setting-nodesep">Node spacing</label>
-    <input id="setting-nodesep" type="number" min="1" step="10">
+  <div class="layout-tuner-header" onclick="document.getElementById('layoutTuner').classList.toggle('open')">▸ Layout tuning</div>
+  <div class="layout-tuner-body">
+    <div class="layout-tuner-grid">
+      <label for="setting-nodesep">Node spacing</label>
+      <input id="setting-nodesep" type="number" min="1" step="10">
 
-    <label for="setting-ranksep">Rank spacing</label>
-    <input id="setting-ranksep" type="number" min="1" step="10">
+      <label for="setting-ranksep">Rank spacing</label>
+      <input id="setting-ranksep" type="number" min="1" step="10">
 
-    <label for="setting-edgesep">Edge spacing</label>
-    <input id="setting-edgesep" type="number" min="1" step="5">
+      <label for="setting-edgesep">Edge spacing</label>
+      <input id="setting-edgesep" type="number" min="1" step="5">
 
-    <label for="setting-zone-gap">Zone gap</label>
-    <input id="setting-zone-gap" type="number" min="0" step="20">
+      <label for="setting-zone-gap">Zone gap</label>
+      <input id="setting-zone-gap" type="number" min="0" step="20">
+    </div>
+    <div class="layout-tuner-actions">
+      <button onclick="applyLayoutSettings()">Apply</button>
+      <button onclick="resetLayoutSettings()">Reset Defaults</button>
+      <button onclick="copyLayoutSettings()">Copy Settings</button>
+    </div>
+    <div class="layout-tuner-status" id="layoutTunerStatus"></div>
   </div>
-  <div class="layout-tuner-actions">
-    <button onclick="applyLayoutSettings()">Apply</button>
-    <button onclick="resetLayoutSettings()">Reset Defaults</button>
-    <button onclick="copyLayoutSettings()">Copy Settings</button>
-  </div>
-  <div class="layout-tuner-status" id="layoutTunerStatus"></div>
 </div>
 
 <script>
@@ -932,6 +962,9 @@ function drawConnections() {
   if (!connectionsVisible) return;
 
   CONNECTIONS.forEach(conn => {
+    const fromEl = document.getElementById('card-' + conn.from);
+    const toEl = document.getElementById('card-' + conn.to);
+    if (!fromEl || !toEl || fromEl.style.display === 'none' || toEl.style.display === 'none') return;
     const fromCenter = getCardCenter(conn.from);
     const toCenter = getCardCenter(conn.to);
     const fromPt = getCardEdgePoint(conn.from, toCenter);
@@ -1512,6 +1545,7 @@ function updateQuestionCount() {
 // Sidebar
 let sidebarTab = 'files';
 const reviewedFiles = new Set();
+const hiddenTypes = new Set();
 
 function toggleSidebar(tab) {
   sidebarTab = tab || 'files';
@@ -1534,6 +1568,7 @@ function updateSidebarTabs() {
 function updateSidebar() {
   const content = document.getElementById('sidebarContent');
   if (!content) return;
+  renderFilterPills();
   if (sidebarTab === 'files') {
     renderFilesList(content);
   } else {
@@ -1541,10 +1576,45 @@ function updateSidebar() {
   }
 }
 
+function renderFilterPills() {
+  const container = document.getElementById('sidebarFilters');
+  if (!container) return;
+  const allFiles = Array.from(FILES_BY_ID.values());
+  const types = [...new Set(allFiles.map(f => f.type || 'other'))].sort();
+  let html = '';
+  types.forEach(type => {
+    const active = !hiddenTypes.has(type);
+    html += `<button class="sidebar-filter-pill ${active ? 'active' : ''}" onclick="toggleTypeFilter('${type}')">${type}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+function toggleTypeFilter(type) {
+  if (hiddenTypes.has(type)) {
+    hiddenTypes.delete(type);
+  } else {
+    hiddenTypes.add(type);
+  }
+  applyTypeFilters();
+  updateSidebar();
+}
+
+function applyTypeFilters() {
+  document.querySelectorAll('.card').forEach(card => {
+    const fileId = card.id.replace('card-', '');
+    const file = FILES_BY_ID.get(fileId);
+    const type = file ? (file.type || 'other') : 'other';
+    card.style.display = hiddenTypes.has(type) ? 'none' : '';
+  });
+  drawConnections();
+}
+
 function renderFilesList(container) {
   const allFiles = Array.from(FILES_BY_ID.values());
   let html = '';
   allFiles.forEach(file => {
+    const type = file.type || 'other';
+    if (hiddenTypes.has(type)) return;
     const reviewed = reviewedFiles.has(file.id);
     const card = document.getElementById('card-' + file.id);
     const questions = card ? card.querySelectorAll('.annotation-item.question:not(.resolved), .annotation-item.concern:not(.resolved)') : [];

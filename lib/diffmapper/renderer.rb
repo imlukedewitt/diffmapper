@@ -48,7 +48,7 @@ module Diffmapper
     end
 
     def file_layout_data(file)
-      { id: file[:id], type: file[:type], dir: file_directory(file[:path]) }
+      { id: file[:id], type: file[:type], dir: file_directory(file[:path]), path: file[:path], status: file[:status] }
     end
 
     def file_directory(path)

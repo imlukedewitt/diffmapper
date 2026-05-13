@@ -205,6 +205,11 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Orthogonal routing (right angles) or spline routing that avoids card rects
 - Could use a simple A* or visibility graph on card bounding boxes
 
+### File type filters
+- Toggle pills in sidebar file list to show/hide cards by type (spec, controller, service, etc.)
+- Hiding a type hides both the sidebar entries and the canvas cards
+- Useful for focusing on source files without test noise, or vice versa
+
 ### Zoom controls
 - Ability to adjust zoom level of the canvas
 - Could be CSS transform scale on the canvas container

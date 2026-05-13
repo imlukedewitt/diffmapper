@@ -95,6 +95,7 @@ RSpec.describe "Canvas HTML", type: :browser do
   it "shows layout tuning controls" do
     visit_generated_html
     expect(page).to have_css("#layoutTuner")
+    find(".layout-tuner-header").click
     expect(page).to have_button("Apply")
     expect(page).to have_button("Reset Defaults")
     expect(page).to have_button("Copy Settings")
@@ -305,6 +306,17 @@ RSpec.describe "Canvas HTML", type: :browser do
       visit_generated_html
       find(".sidebar-tab[data-tab='questions']").click
       expect(page).to have_css(".sidebar-tab[data-tab='questions'].active")
+    end
+
+    it "filters cards by type" do
+      visit_generated_html
+      expect(page).to have_css(".sidebar-filter-pill", minimum: 1)
+      # Click a filter pill to hide that type
+      pill = first(".sidebar-filter-pill.active")
+      type_name = pill.text.downcase
+      pill.click
+      # The pill should no longer be active
+      expect(page).not_to have_css(".sidebar-filter-pill.active", text: /#{type_name}/i)
     end
   end
 
