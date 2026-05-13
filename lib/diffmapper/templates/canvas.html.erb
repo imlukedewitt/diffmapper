@@ -721,18 +721,21 @@ document.querySelectorAll('.card').forEach(card => {
     if (['SUMMARY','BUTTON','TEXTAREA','INPUT'].includes(e.target.tagName) || e.target.isContentEditable) return;
     dragCard = card;
     dragCard.classList.add('dragging');
-    const rect = card.getBoundingClientRect();
+    const cardLeft = parseFloat(card.style.left) || 0;
+    const cardTop = parseFloat(card.style.top) || 0;
     const canvas = document.getElementById('canvas');
-    dragOffsetX = e.clientX - rect.left + canvas.getBoundingClientRect().left - 30 + canvas.scrollLeft;
-    dragOffsetY = e.clientY - rect.top + canvas.getBoundingClientRect().top - 30 + canvas.scrollTop;
+    const canvasRect = canvas.getBoundingClientRect();
+    dragOffsetX = e.clientX - canvasRect.left + canvas.scrollLeft - cardLeft;
+    dragOffsetY = e.clientY - canvasRect.top + canvas.scrollTop - cardTop;
   });
 });
 
 document.addEventListener('mousemove', (e) => {
   if (!dragCard) return;
   const canvas = document.getElementById('canvas');
-  dragCard.style.left = (e.clientX - dragOffsetX + canvas.scrollLeft) + 'px';
-  dragCard.style.top = (e.clientY - dragOffsetY + canvas.scrollTop) + 'px';
+  const canvasRect = canvas.getBoundingClientRect();
+  dragCard.style.left = (e.clientX - canvasRect.left + canvas.scrollLeft - dragOffsetX) + 'px';
+  dragCard.style.top = (e.clientY - canvasRect.top + canvas.scrollTop - dragOffsetY) + 'px';
   drawConnections();
 });
 

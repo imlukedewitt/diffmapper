@@ -187,9 +187,38 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Layout tuning panel with copy-to-clipboard
 
 ## Remaining Ideas
+
+### File sidebar / review checklist
+- Sidebar list of all files in the PR (toggleable from the "N files" label in header?)
+- Each file markable as "reviewed" — shows progress through the PR
+- Clicking a file in the list navigates/scrolls to that card on the canvas
+- UX TBD — could be a slide-out panel, popover, or toggle
+
+### Questions/concerns navigator
+- The top bar shows "N Questions" but no way to browse them
+- Need a way to see which cards have questions/concerns and what they say
+- Similar UX to file sidebar — could be a filtered view or separate panel
+
+### Pathfinding connection lines
+- Lines currently draw straight between cards, going behind other cards
+- Want "train tracks" style routing — lines path-find around obstacles
+- Orthogonal routing (right angles) or spline routing that avoids card rects
+- Could use a simple A* or visibility graph on card bounding boxes
+
+### Zoom controls
+- Ability to adjust zoom level of the canvas
+- Could be CSS transform scale on the canvas container
+- Needs to coordinate with scroll position and card interactions
+
+### Context files (not in diff)
+- Agent can add files to the map that weren't changed in the PR
+- Shown as grey cards (vs green/orange/red for changed files)
+- Useful for "painting pictures" — showing how changed code relates to unchanged code
+- Low priority
+
+### Other
 - Difftastic integration for richer diff display
 - localStorage persistence for notes and card positions
 - Minimap for large PRs
 - Connection line arrowheads for directionality
-- Zoom in/out support
 - Extract layout JS from ERB into standalone module for unit testing
