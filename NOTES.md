@@ -156,7 +156,6 @@ Layout is fully deterministic — same input always produces the same output.
 - `zoneGap` (default 120) controls spacing between zones and between stacked components
 
 **Step 7: Cluster labels + connection lines**
-- Directory-based cluster labels positioned above their node groups
 - SVG connection lines drawn between card edges (not centers)
 
 ### Layout tuning panel
@@ -177,7 +176,7 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 ## Completed Features
 
 - Expandable inline diffs (click "View diff" on any card)
-- Directory clustering with labels
+- Directory clustering in sidebar file list
 - Editable notes/annotations (Note and Question types)
 - LLM-generated summaries, details, annotations (contenteditable)
 - Open questions count in top bar (clickable → opens sidebar)

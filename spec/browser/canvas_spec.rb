@@ -82,11 +82,6 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(page).to have_css(".card", count: 13)
   end
 
-  it "shows cluster labels for file groups" do
-    visit_generated_html
-    expect(page).to have_css(".cluster-label", minimum: 1)
-  end
-
   it "does not have overlapping cards after layout" do
     visit_generated_html
     expect(count_card_overlaps).to eq(0)

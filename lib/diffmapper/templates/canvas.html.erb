@@ -414,16 +414,7 @@
   .legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
   .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
-  .cluster-label {
-    position: absolute;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: var(--text-dim);
-    z-index: 5;
-    pointer-events: none;
-  }
+
 
   .context-bar {
     position: fixed;
@@ -1071,8 +1062,6 @@ function layoutCards() {
     card.style.visibility = 'visible';
   });
 
-  document.querySelectorAll('.cluster-label').forEach(el => el.remove());
-
   const settings = currentLayoutSettings();
   const nodeMap = buildMeasuredNodeMap(false);
   const units = buildLayoutUnits(nodeMap);
@@ -1088,13 +1077,6 @@ function layoutCards() {
   });
 
   packZones(zones, settings);
-
-  const allNodes = Array.from(nodeMap.values());
-  repositionClusterLabels(allNodes.map(n => ({
-    ...n,
-    x: parseFloat(n.el.style.left) || 0,
-    y: parseFloat(n.el.style.top) || 0
-  })));
 
   storePositions();
 }
@@ -1341,46 +1323,6 @@ function primaryIdForUnit(unit) {
   return unit.primaryId || '';
 }
 
-function buildClusters() {
-  // Group paired files by source directory
-  const dirMap = new Map();
-
-  GROUPS.paired.forEach(([source, spec]) => {
-    const dir = source.dir || 'other';
-    if (!dirMap.has(dir)) dirMap.set(dir, { pairs: [], singles: [] });
-    dirMap.get(dir).pairs.push([source, spec]);
-  });
-
-  // Add unpaired sources to their directory cluster
-  GROUPS.unpaired_sources.forEach(file => {
-    const dir = file.dir || 'other';
-    if (!dirMap.has(dir)) dirMap.set(dir, { pairs: [], singles: [] });
-    dirMap.get(dir).singles.push(file);
-  });
-
-  // Add unpaired specs — try to match to an existing cluster by dir
-  GROUPS.unpaired_specs.forEach(file => {
-    const dir = file.dir || 'other';
-    // Spec dirs like "controllers/foo" might match source cluster
-    const matchedDir = Array.from(dirMap.keys()).find(d => dir.includes(d) || d.includes(dir));
-    const targetDir = matchedDir || dir;
-    if (!dirMap.has(targetDir)) dirMap.set(targetDir, { pairs: [], singles: [] });
-    dirMap.get(targetDir).singles.push(file);
-  });
-
-  // Convert to array with labels
-  return Array.from(dirMap.entries()).map(([dir, data]) => ({
-    label: formatClusterLabel(dir),
-    pairs: data.pairs,
-    singles: data.singles
-  }));
-}
-
-function formatClusterLabel(dir) {
-  return dir.split('/').map(part =>
-    part.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
-  ).join(' / ');
-}
 
 
 function buildLayoutUnits(nodeMap) {
@@ -1464,33 +1406,6 @@ function applyUnitPosition(unit) {
 }
 
 
-function repositionClusterLabels(nodes) {
-  // Remove old labels and re-add based on where nodes actually ended up
-  document.querySelectorAll('.cluster-label').forEach(el => el.remove());
-  const clusters = buildClusters();
-  const canvasInner = document.getElementById('canvasInner');
-
-  clusters.forEach(cluster => {
-    const clusterNodeIds = [
-      ...cluster.pairs.flatMap(([s, t]) => [s.id, t.id]),
-      ...cluster.singles.map(f => f.id)
-    ];
-    const clusterNodes = clusterNodeIds
-      .map(id => nodes.find(n => n.id === id))
-      .filter(Boolean);
-    if (clusterNodes.length === 0) return;
-
-    const minX = Math.min(...clusterNodes.map(n => n.x));
-    const minY = Math.min(...clusterNodes.map(n => n.y));
-
-    const label = document.createElement('div');
-    label.className = 'cluster-label';
-    label.textContent = cluster.label;
-    label.style.left = minX + 'px';
-    label.style.top = (minY - 20) + 'px';
-    canvasInner.appendChild(label);
-  });
-}
 
 function tidyLayout() {
   layoutCards();
