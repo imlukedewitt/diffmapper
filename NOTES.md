@@ -155,7 +155,7 @@ Layout is fully deterministic — same input always produces the same output.
 - `preferredLayoutWidth` uses `window.innerWidth` (min 1600) so zones can sit side by side
 - `zoneGap` (default 120) controls spacing between zones and between stacked components
 
-**Step 7: Cluster labels + connection lines**
+**Step 7: Connection lines**
 - SVG connection lines drawn between card edges (not centers)
 
 ### Layout tuning panel
@@ -168,10 +168,17 @@ Fixed panel at bottom-left of canvas. Controls:
 Apply button re-runs layout. Copy Settings button copies current values as JSON for pasting back.
 
 ### Key files
-- `lib/diffmapper/templates/canvas.html.erb` — all JS layout code (dagre integration, zone packing, cluster labels, tuner panel)
+- `lib/diffmapper/templates/canvas.html.erb` — all JS layout code (dagre integration, zone packing, tuner panel)
 - `lib/diffmapper/renderer.rb` — `grouped_files_json` and `file_layout_data` provide metadata to JS
 - `spec/browser/canvas_spec.rb` — browser tests for layout correctness
 - `spec/support/browser_helper.rb` — `count_card_overlaps` and `card_positions` helpers
+
+### ELK experiment (reverted)
+- Tried replacing dagre with ELK.js for layered layout + orthogonal routed edges
+- Initial layouts looked better and routed lines were much cleaner
+- Main problem: ELK couples node placement and edge routing, which clashes with manual drag as a first-class interaction
+- After drag, either cards snapped back to ELK-owned positions or routing had to fall back to a second non-ELK method
+- Decision: revert to dagre as the baseline and revisit routing separately with an independent post-layout router
 
 ## Completed Features
 
@@ -205,6 +212,7 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Want "train tracks" style routing — lines path-find around obstacles
 - Orthogonal routing (right angles) or spline routing that avoids card rects
 - Could use a simple A* or visibility graph on card bounding boxes
+- Likely better as a separate routing layer on top of dagre, not by replacing dagre with ELK
 
 ### Zoom controls
 - Ability to adjust zoom level of the canvas
