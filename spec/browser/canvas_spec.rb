@@ -96,57 +96,64 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(page).to have_button("Copy Settings")
   end
 
-  it "layers connected files top-to-bottom while keeping test pairs horizontal" do
-    data = Diffmapper::Parser.new(
-      File.read(File.join(__dir__, "../fixtures/diffs/real_pr.diff"))
-    ).call
-    data[:connections] += [
-      { from: "archive_controller", to: "team_archiver", label: "passes params", type: "calls" },
-      { from: "bulk_actions_controller", to: "archiver", label: "passes params", type: "calls" },
-      { from: "team_archiver", to: "archiver", label: "delegates to", type: "calls" },
-      { from: "archivetimeline", to: "archiveoptions", label: "showSkipCheck", type: "passes_prop" },
-      { from: "index", to: "archiveoptions", label: "showSkipCheck", type: "passes_prop" }
-    ]
+  describe "layered layout with connections" do
+    let(:positions) do
+      data = Diffmapper::Parser.new(
+        File.read(File.join(__dir__, "../fixtures/diffs/real_pr.diff"))
+      ).call
+      data[:connections] += [
+        { from: "archive_controller", to: "team_archiver", label: "passes params", type: "calls" },
+        { from: "bulk_actions_controller", to: "archiver", label: "passes params", type: "calls" },
+        { from: "team_archiver", to: "archiver", label: "delegates to", type: "calls" },
+        { from: "archivetimeline", to: "archiveoptions", label: "showSkipCheck", type: "passes_prop" },
+        { from: "index", to: "archiveoptions", label: "showSkipCheck", type: "passes_prop" }
+      ]
 
-    visit_generated_html(data_overrides: data)
+      visit_generated_html(data_overrides: data)
 
-    positions = card_positions(
-      "archive_controller",
-      "archive_controller_spec",
-      "team_archiver",
-      "team_archiver_spec",
-      "archiver",
-      "archiver_spec",
-      "bulk_actions_controller",
-      "bulk_actions_controller_spec",
-      "archivetimeline",
-      "archiveoptions",
-      "index",
-      "archive_via_api_with_confirmation_spec",
-      "archiving_a_team_project_spec"
-    )
+      card_positions(
+        "archive_controller", "archive_controller_spec",
+        "team_archiver", "team_archiver_spec",
+        "archiver", "archiver_spec",
+        "bulk_actions_controller", "bulk_actions_controller_spec",
+        "archivetimeline", "archiveoptions", "index",
+        "archive_via_api_with_confirmation_spec",
+        "archiving_a_team_project_spec"
+      )
+    end
 
-    expect(positions["team_archiver"]["top"]).to be > positions["archive_controller"]["top"]
-    expect(positions["archiver"]["top"]).to be > positions["team_archiver"]["top"]
-    expect(positions["archiver"]["top"]).to be > positions["bulk_actions_controller"]["top"]
+    it "places call targets below their sources" do
+      expect(positions["team_archiver"]["top"]).to be > positions["archive_controller"]["top"]
+      expect(positions["archiver"]["top"]).to be > positions["team_archiver"]["top"]
+      expect(positions["archiver"]["top"]).to be > positions["bulk_actions_controller"]["top"]
+    end
 
-    expect(positions["archiveoptions"]["top"]).to be > positions["archivetimeline"]["top"]
-    expect(positions["archiveoptions"]["top"]).to be > positions["index"]["top"]
+    it "places prop receivers below their sources" do
+      expect(positions["archiveoptions"]["top"]).to be > positions["archivetimeline"]["top"]
+      expect(positions["archiveoptions"]["top"]).to be > positions["index"]["top"]
+    end
 
-    expect(positions["archivetimeline"]["top"]).to be >= positions["archive_controller"]["top"]
-    expect(positions["archive_via_api_with_confirmation_spec"]["top"]).to be >= positions["archive_controller"]["top"]
-    expect(positions["archiving_a_team_project_spec"]["top"]).to be > positions["archive_controller"]["top"]
-    expect(positions["archiving_a_team_project_spec"]["top"]).to be > positions["archive_via_api_with_confirmation_spec"]["top"]
+    it "keeps test pairs horizontally aligned" do
+      pairs = %w[archive_controller team_archiver bulk_actions_controller archiver]
+      pairs.each do |name|
+        spec_name = "#{name}_spec"
+        expect(positions[spec_name]["left"]).to be > positions[name]["left"]
+        y_diff = (positions[spec_name]["top"] - positions[name]["top"]).abs
+        expect(y_diff).to be < 20
+      end
+    end
 
-    expect(positions["archive_controller_spec"]["left"]).to be > positions["archive_controller"]["left"]
-    expect((positions["archive_controller_spec"]["top"] - positions["archive_controller"]["top"]).abs).to be < 20
-    expect(positions["team_archiver_spec"]["left"]).to be > positions["team_archiver"]["left"]
-    expect((positions["team_archiver_spec"]["top"] - positions["team_archiver"]["top"]).abs).to be < 20
-    expect(positions["bulk_actions_controller_spec"]["left"]).to be > positions["bulk_actions_controller"]["left"]
-    expect((positions["bulk_actions_controller_spec"]["top"] - positions["bulk_actions_controller"]["top"]).abs).to be < 20
-    expect(positions["archiver_spec"]["left"]).to be > positions["archiver"]["left"]
-    expect((positions["archiver_spec"]["top"] - positions["archiver"]["top"]).abs).to be < 20
-    expect(count_card_overlaps).to eq(0)
+    it "places orphan specs below connected files" do
+      expect(positions["archivetimeline"]["top"]).to be >= positions["archive_controller"]["top"]
+      conf_spec = positions["archive_via_api_with_confirmation_spec"]
+      expect(conf_spec["top"]).to be >= positions["archive_controller"]["top"]
+      archiving_spec = positions["archiving_a_team_project_spec"]
+      expect(archiving_spec["top"]).to be > conf_spec["top"]
+    end
+
+    it "has no overlapping cards" do
+      expect(count_card_overlaps).to eq(0)
+    end
   end
 
   it "expand all diffs opens all diff sections" do
@@ -269,7 +276,7 @@ RSpec.describe "Canvas HTML", type: :browser do
     end
   end
 
-  context "sidebar" do
+  context "with sidebar interactions" do
     it "shows sidebar with file list" do
       visit_generated_html
       expect(page).to have_css(".sidebar")
@@ -306,11 +313,9 @@ RSpec.describe "Canvas HTML", type: :browser do
     it "filters cards by type" do
       visit_generated_html
       expect(page).to have_css(".sidebar-filter-pill", minimum: 1)
-      # Click a filter pill to hide that type
       pill = first(".sidebar-filter-pill.active")
       type_name = pill.text.downcase
       pill.click
-      # The pill should no longer be active
       expect(page).not_to have_css(".sidebar-filter-pill.active", text: /#{type_name}/i)
     end
 
@@ -327,13 +332,13 @@ RSpec.describe "Canvas HTML", type: :browser do
 
     it "shows review progress counter" do
       visit_generated_html
-      expect(page).to have_css(".sidebar-progress", text: /0\/\d+ reviewed/)
+      expect(page).to have_css(".sidebar-progress", text: %r{0/\d+ reviewed})
     end
 
     it "updates progress when marking files reviewed" do
       visit_generated_html
       first(".file-check").check
-      expect(page).to have_css(".sidebar-progress", text: /1\/\d+ reviewed/)
+      expect(page).to have_css(".sidebar-progress", text: %r{1/\d+ reviewed})
     end
 
     it "checks all files with check-all button" do
@@ -341,11 +346,14 @@ RSpec.describe "Canvas HTML", type: :browser do
       find(".sidebar-check-all").click
       file_count = all(".sidebar-file-item").count
       expect(page).to have_css(".sidebar-file-item.reviewed", count: file_count)
-      expect(page).to have_css(".sidebar-progress", text: /#{file_count}\/#{file_count} reviewed/)
+      expect(page).to have_css(
+        ".sidebar-progress",
+        text: %r{#{file_count}/#{file_count} reviewed}
+      )
     end
   end
 
-  context "question resolution" do
+  context "with question resolution" do
     it "resolves a question and updates count" do
       visit_generated_html
       first(".add-annotation-btn").click
@@ -360,7 +368,7 @@ RSpec.describe "Canvas HTML", type: :browser do
     end
   end
 
-  context "localStorage persistence" do
+  context "with localStorage persistence" do
     it "persists a note after adding it" do
       visit_generated_html
       first(".add-annotation-btn").click
@@ -368,7 +376,6 @@ RSpec.describe "Canvas HTML", type: :browser do
       first(".annotation-save").click
       expect(page).to have_css(".annotation-item", text: "Remember this")
 
-      # Verify localStorage was written
       stored = page.evaluate_script("localStorage.getItem(STORAGE_KEY)")
       expect(stored).to include("Remember this")
     end
@@ -388,7 +395,6 @@ RSpec.describe "Canvas HTML", type: :browser do
       first(".annotation-save").click
       expect(page).to have_css(".annotation-item", text: "Persist me")
 
-      # Reload the page
       visit_generated_html
       expect(page).to have_css(".annotation-item", text: "Persist me")
     end
