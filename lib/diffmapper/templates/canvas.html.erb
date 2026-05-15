@@ -190,7 +190,18 @@
     color: var(--text-bright);
     word-break: break-all;
     line-height: 1.4;
+    cursor: pointer;
   }
+  .filename:hover { text-decoration: underline; }
+  .filename-copied {
+    font-size: 9px;
+    color: var(--green);
+    margin-left: 6px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .filename-copied.show { opacity: 1; }
 
   .card-body {
     padding: 10px 12px;
@@ -752,7 +763,7 @@
         <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('<%= file[:id] %>', this.checked)">
         <span class="status-dot <%= status_class(file) %>"></span>
         <span class="file-badge <%= badge_class(file) %>"><%= file[:type] %></span>
-        <span class="filename"><%= file[:path] %></span>
+        <span class="filename" onclick="copyFilename(this, '<%= file[:path] %>')"><%= file[:path] %><span class="filename-copied">Copied!</span></span>
       </div>
       <div class="card-body">
         <div class="line-counts">
@@ -2100,6 +2111,14 @@ function syncReviewedState(fileId) {
   card.classList.toggle('reviewed', checked);
   const checkbox = card.querySelector('.card-reviewed-check');
   if (checkbox) checkbox.checked = checked;
+}
+
+function copyFilename(el, path) {
+  navigator.clipboard.writeText(path).then(() => {
+    const badge = el.querySelector('.filename-copied');
+    badge.classList.add('show');
+    setTimeout(() => badge.classList.remove('show'), 1200);
+  });
 }
 
 function navigateToCard(fileId) {
