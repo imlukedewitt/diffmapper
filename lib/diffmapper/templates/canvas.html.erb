@@ -112,6 +112,7 @@
   .card {
     position: absolute;
     width: 420px;
+    min-width: 200px;
     background: var(--surface);
     border: 1.5px solid var(--border);
     border-radius: 8px;
@@ -119,6 +120,10 @@
     cursor: grab;
     user-select: none;
     transition: box-shadow 0.15s;
+    resize: both;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .card:hover { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); }
   .card.dragging { cursor: grabbing; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); z-index: 50; opacity: 0.95; }
@@ -192,6 +197,11 @@
     font-size: 12px;
     color: var(--text);
     line-height: 1.6;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .line-counts {
@@ -255,6 +265,9 @@
     margin-top: 8px;
     border-top: 1px solid rgba(255,255,255,0.05);
     padding-top: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
   .annotation-item {
     padding: 4px 8px;
@@ -364,6 +377,7 @@
     padding-top: 6px;
     max-width: 100%;
     overflow: hidden;
+    min-height: 0;
   }
   .card-diff summary {
     cursor: pointer;
@@ -380,7 +394,6 @@
     font-size: 11px;
     line-height: 1.5;
     overflow-x: auto;
-    max-height: 400px;
     overflow-y: auto;
     white-space: pre;
     word-break: keep-all;
@@ -928,6 +941,9 @@ document.querySelectorAll('.card').forEach(card => {
     topZ++;
     card.style.zIndex = topZ;
     if (['SUMMARY','BUTTON','TEXTAREA','INPUT'].includes(e.target.tagName) || e.target.isContentEditable) return;
+    // Don't start drag if clicking the resize handle (bottom-right 18x18 area)
+    const rect = card.getBoundingClientRect();
+    if (e.clientX > rect.right - 18 && e.clientY > rect.bottom - 18) return;
     dragCard = card;
     dragCard.classList.add('dragging');
     const cardLeft = parseFloat(card.style.left) || 0;
@@ -2263,6 +2279,10 @@ window.addEventListener('resize', drawConnections);
 document.querySelectorAll('details').forEach(d => {
   d.addEventListener('toggle', () => setTimeout(drawConnections, 10));
 });
+
+// Redraw connections when cards are resized
+const cardResizeObserver = new ResizeObserver(() => drawConnections());
+document.querySelectorAll('.card').forEach(card => cardResizeObserver.observe(card));
 </script>
 </body>
 </html>
