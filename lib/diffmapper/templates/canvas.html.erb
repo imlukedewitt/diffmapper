@@ -2172,11 +2172,17 @@ function saveState() {
     });
 
     const positions = {};
+    const sizes = {};
     document.querySelectorAll('.card').forEach(card => {
       const left = card.style.left;
       const top = card.style.top;
       if (left && top) {
         positions[card.id] = { left, top };
+      }
+      const w = card.style.width;
+      const h = card.style.height;
+      if (w || h) {
+        sizes[card.id] = { width: w, height: h };
       }
     });
 
@@ -2184,6 +2190,7 @@ function saveState() {
       reviewed: Array.from(reviewedFiles),
       annotations: annotations,
       positions: positions,
+      sizes: sizes,
       hiddenTypes: Array.from(hiddenTypes)
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -2242,6 +2249,16 @@ function loadState() {
         if (card) {
           card.style.left = pos.left;
           card.style.top = pos.top;
+        }
+      });
+    }
+
+    if (state.sizes) {
+      Object.entries(state.sizes).forEach(([cardId, size]) => {
+        const card = document.getElementById(cardId);
+        if (card) {
+          if (size.width) card.style.width = size.width;
+          if (size.height) card.style.height = size.height;
         }
       });
     }
@@ -2316,7 +2333,7 @@ document.querySelectorAll('details').forEach(d => {
 });
 
 // Redraw connections when cards are resized
-const cardResizeObserver = new ResizeObserver(() => drawConnections());
+const cardResizeObserver = new ResizeObserver(() => { drawConnections(); saveState(); });
 document.querySelectorAll('.card').forEach(card => cardResizeObserver.observe(card));
 </script>
 </body>
