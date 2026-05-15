@@ -958,36 +958,365 @@ document.addEventListener('mouseup', () => {
   }
 });
 
-// Connection lines
+// === Edge Router ===
+// Grid-based A* orthogonal router.
+// - Minimum gap from card edges (padding)
+// - Turn penalty to prefer straight runs
+// - Incremental soft-cost so parallel paths get lane spacing
+// - Label deconfliction
+
+const ROUTER = {
+  cellSize: 10,
+  cardPadding: 14,
+  turnPenalty: 3,
+  usedCellCost: 5,
+  margin: 60
+};
+
 let connectionsVisible = true;
 
-function getCardEdgePoint(id, targetPoint) {
-  const el = document.getElementById('card-' + id);
-  if (!el) return { x: 0, y: 0 };
-  const left = parseFloat(el.style.left) || 0;
-  const top = parseFloat(el.style.top) || 0;
-  const w = el.offsetWidth, h = el.offsetHeight;
-  const cx = left + w/2, cy = top + h/2;
-  const dx = targetPoint.x - cx, dy = targetPoint.y - cy;
-  const absDx = Math.abs(dx), absDy = Math.abs(dy);
+function toggleConnections() {
+  connectionsVisible = !connectionsVisible;
+  drawConnections();
+}
 
-  if (absDx * h > absDy * w) {
-    const sign = dx > 0 ? 1 : -1;
-    return { x: cx + sign * w/2, y: cy + dy * (w/2) / absDx };
-  } else {
-    const sign = dy > 0 ? 1 : -1;
-    return { x: cx + dx * (h/2) / absDy, y: cy + sign * h/2 };
+// --- Grid construction ---
+
+function getCardRects() {
+  const rects = [];
+  document.querySelectorAll('.card').forEach(el => {
+    if (el.style.display === 'none') return;
+    rects.push({
+      id: el.id.replace('card-', ''),
+      x: parseFloat(el.style.left) || 0,
+      y: parseFloat(el.style.top) || 0,
+      w: el.offsetWidth,
+      h: el.offsetHeight
+    });
+  });
+  return rects;
+}
+
+function buildGrid(cardRects) {
+  const cs = ROUTER.cellSize;
+  const pad = ROUTER.cardPadding;
+  const margin = ROUTER.margin;
+
+  // Compute bounds from all cards
+  let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+  cardRects.forEach(r => {
+    minX = Math.min(minX, r.x - pad - margin);
+    minY = Math.min(minY, r.y - pad - margin);
+    maxX = Math.max(maxX, r.x + r.w + pad + margin);
+    maxY = Math.max(maxY, r.y + r.h + pad + margin);
+  });
+  minX = Math.floor(minX / cs) * cs;
+  minY = Math.floor(minY / cs) * cs;
+
+  const cols = Math.ceil((maxX - minX) / cs);
+  const rows = Math.ceil((maxY - minY) / cs);
+
+  // cost array: 0 = free, -1 = blocked, >0 = soft cost
+  const cells = new Uint16Array(rows * cols);
+
+  // Mark card interiors + padding as blocked
+  cardRects.forEach(r => {
+    const left = Math.floor((r.x - pad - minX) / cs);
+    const top = Math.floor((r.y - pad - minY) / cs);
+    const right = Math.ceil((r.x + r.w + pad - minX) / cs);
+    const bottom = Math.ceil((r.y + r.h + pad - minY) / cs);
+    for (let row = Math.max(0, top); row < Math.min(rows, bottom); row++) {
+      for (let col = Math.max(0, left); col < Math.min(cols, right); col++) {
+        cells[row * cols + col] = 65535; // blocked
+      }
+    }
+  });
+
+  return { cells, rows, cols, minX, minY, cs };
+}
+
+function worldToGrid(grid, x, y) {
+  return {
+    col: Math.round((x - grid.minX) / grid.cs),
+    row: Math.round((y - grid.minY) / grid.cs)
+  };
+}
+
+function gridToWorld(grid, col, row) {
+  return {
+    x: grid.minX + col * grid.cs,
+    y: grid.minY + row * grid.cs
+  };
+}
+
+// --- A* pathfinder ---
+
+function astar(grid, startCol, startRow, endCol, endRow) {
+  const { cells, rows, cols } = grid;
+  if (startCol === endCol && startRow === endRow) return [{ col: startCol, row: startRow }];
+
+  // Clamp to grid bounds
+  startCol = Math.max(0, Math.min(cols - 1, startCol));
+  startRow = Math.max(0, Math.min(rows - 1, startRow));
+  endCol = Math.max(0, Math.min(cols - 1, endCol));
+  endRow = Math.max(0, Math.min(rows - 1, endRow));
+
+  const key = (col, row) => row * cols + col;
+  const heuristic = (c, r) => Math.abs(c - endCol) + Math.abs(r - endRow);
+
+  // 0-3: orthogonal, 4-7: diagonal
+  const DIRS = [[0,-1],[1,0],[0,1],[-1,0],[1,-1],[1,1],[-1,1],[-1,-1]];
+  const DIR_COST = [1, 1, 1, 1, 1.4, 1.4, 1.4, 1.4];
+  const startKey = key(startCol, startRow);
+  const endKey = key(endCol, endRow);
+
+  const gScore = new Map();
+  const cameFrom = new Map();
+  const dirFrom = new Map(); // direction used to reach this cell
+  gScore.set(startKey, 0);
+
+  // Binary heap priority queue (simple array-based)
+  const open = [{ col: startCol, row: startRow, f: heuristic(startCol, startRow) }];
+  const inOpen = new Set([startKey]);
+  const closed = new Set();
+
+  while (open.length > 0) {
+    // Find lowest f (linear scan is fine for our grid sizes)
+    let bestIdx = 0;
+    for (let i = 1; i < open.length; i++) {
+      if (open[i].f < open[bestIdx].f) bestIdx = i;
+    }
+    const current = open[bestIdx];
+    open[bestIdx] = open[open.length - 1];
+    open.pop();
+
+    const ck = key(current.col, current.row);
+    if (ck === endKey) {
+      // Reconstruct path
+      const path = [];
+      let k = endKey;
+      while (k !== undefined) {
+        const r = Math.floor(k / cols);
+        const c = k % cols;
+        path.push({ col: c, row: r });
+        k = cameFrom.get(k);
+      }
+      path.reverse();
+      return path;
+    }
+
+    inOpen.delete(ck);
+    closed.add(ck);
+    const currentG = gScore.get(ck);
+    const currentDir = dirFrom.get(ck);
+
+    for (let d = 0; d < 8; d++) {
+      const nc = current.col + DIRS[d][0];
+      const nr = current.row + DIRS[d][1];
+      if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
+
+      const nk = key(nc, nr);
+      if (closed.has(nk)) continue;
+
+      const cellCost = cells[nk];
+      if (cellCost === 65535 && nk !== endKey) continue; // blocked (allow end cell)
+
+      let moveCost = DIR_COST[d] + (cellCost < 65535 ? cellCost : 0);
+      if (currentDir !== undefined && currentDir !== d) {
+        moveCost += ROUTER.turnPenalty;
+      }
+
+      const tentativeG = currentG + moveCost;
+      if (tentativeG < (gScore.get(nk) ?? Infinity)) {
+        gScore.set(nk, tentativeG);
+        cameFrom.set(nk, ck);
+        dirFrom.set(nk, d);
+        const f = tentativeG + heuristic(nc, nr);
+        if (!inOpen.has(nk)) {
+          open.push({ col: nc, row: nr, f });
+          inOpen.add(nk);
+        } else {
+          // Update f score in open list
+          for (let i = 0; i < open.length; i++) {
+            if (key(open[i].col, open[i].row) === nk) { open[i].f = f; break; }
+          }
+        }
+      }
+    }
+  }
+
+  // No path found — fall back to straight line
+  return null;
+}
+
+// --- Path simplification ---
+
+function simplifyPath(path) {
+  if (!path || path.length <= 2) return path;
+  const result = [path[0]];
+  for (let i = 1; i < path.length - 1; i++) {
+    const prev = result[result.length - 1];
+    const curr = path[i];
+    const next = path[i + 1];
+    // Keep point if direction changes (not collinear)
+    const dx1 = curr.col - prev.col;
+    const dy1 = curr.row - prev.row;
+    const dx2 = next.col - curr.col;
+    const dy2 = next.row - curr.row;
+    if (dx1 !== dx2 || dy1 !== dy2) result.push(curr);
+  }
+  result.push(path[path.length - 1]);
+  return result;
+}
+
+// --- Exit/entry point selection ---
+
+function pickExitSide(sourceRect, targetRect) {
+  const scx = sourceRect.x + sourceRect.w / 2;
+  const scy = sourceRect.y + sourceRect.h / 2;
+  const tcx = targetRect.x + targetRect.w / 2;
+  const tcy = targetRect.y + targetRect.h / 2;
+  const dx = tcx - scx;
+  const dy = tcy - scy;
+
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx > 0 ? 'right' : 'left';
+  }
+  return dy > 0 ? 'bottom' : 'top';
+}
+
+function sideAnchor(rect, side, padding, offset) {
+  // offset is 0..1 along the side (0.5 = center)
+  switch (side) {
+    case 'top':    return { x: rect.x + rect.w * offset, y: rect.y - padding };
+    case 'bottom': return { x: rect.x + rect.w * offset, y: rect.y + rect.h + padding };
+    case 'left':   return { x: rect.x - padding,         y: rect.y + rect.h * offset };
+    case 'right':  return { x: rect.x + rect.w + padding, y: rect.y + rect.h * offset };
   }
 }
 
-function getCardCenter(id) {
-  const el = document.getElementById('card-' + id);
-  if (!el) return { x: 0, y: 0 };
-  return {
-    x: (parseFloat(el.style.left) || 0) + el.offsetWidth/2,
-    y: (parseFloat(el.style.top) || 0) + el.offsetHeight/2
-  };
+function cardEdgePoint(rect, side, offset) {
+  switch (side) {
+    case 'top':    return { x: rect.x + rect.w * offset, y: rect.y };
+    case 'bottom': return { x: rect.x + rect.w * offset, y: rect.y + rect.h };
+    case 'left':   return { x: rect.x,              y: rect.y + rect.h * offset };
+    case 'right':  return { x: rect.x + rect.w,     y: rect.y + rect.h * offset };
+  }
 }
+
+// --- Route a single edge ---
+
+function routeEdge(fromRect, toRect, grid, exitSide, entrySide, exitOffset, entryOffset) {
+  const pad = ROUTER.cardPadding;
+
+  const startWorld = sideAnchor(fromRect, exitSide, pad + 2, exitOffset);
+  const endWorld = sideAnchor(toRect, entrySide, pad + 2, entryOffset);
+
+  const startEdge = cardEdgePoint(fromRect, exitSide, exitOffset);
+  const endEdge = cardEdgePoint(toRect, entrySide, entryOffset);
+
+  // Temporarily unblock cells near the start/end anchors
+  const startCell = worldToGrid(grid, startWorld.x, startWorld.y);
+  const endCell = worldToGrid(grid, endWorld.x, endWorld.y);
+
+  const savedCells = unblockNearPoint(grid, startCell.col, startCell.row);
+  const savedCells2 = unblockNearPoint(grid, endCell.col, endCell.row);
+
+  const rawPath = astar(grid, startCell.col, startCell.row, endCell.col, endCell.row);
+
+  // Restore blocked cells
+  restoreCells(grid, savedCells);
+  restoreCells(grid, savedCells2);
+
+  if (!rawPath) {
+    // Fallback: straight line
+    return { points: [startEdge, endEdge], exitSide, entrySide };
+  }
+
+  const simplified = simplifyPath(rawPath);
+  const worldPoints = simplified.map(p => gridToWorld(grid, p.col, p.row));
+
+  // Prepend card edge, append card edge
+  const points = [startEdge, ...worldPoints, endEdge];
+
+  // Mark used cells with soft cost for lane spacing
+  rawPath.forEach(p => {
+    const idx = p.row * grid.cols + p.col;
+    if (grid.cells[idx] < 65535) {
+      grid.cells[idx] = Math.min(grid.cells[idx] + ROUTER.usedCellCost, 65534);
+    }
+  });
+
+  return { points, exitSide, entrySide };
+}
+
+function unblockNearPoint(grid, col, row) {
+  // Unblock a small 3x3 area around the anchor point
+  const saved = [];
+  const radius = 1;
+  for (let r = row - radius; r <= row + radius; r++) {
+    for (let c = col - radius; c <= col + radius; c++) {
+      if (r < 0 || r >= grid.rows || c < 0 || c >= grid.cols) continue;
+      const idx = r * grid.cols + c;
+      if (grid.cells[idx] === 65535) {
+        saved.push({ idx, val: 65535 });
+        grid.cells[idx] = 0;
+      }
+    }
+  }
+  return saved;
+}
+
+function restoreCells(grid, saved) {
+  saved.forEach(s => { grid.cells[s.idx] = s.val; });
+}
+
+// --- Label placement ---
+
+function placeLabelOnPath(points) {
+  // Place label at the midpoint of total path length (center of the route)
+  let totalLen = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const dx = points[i + 1].x - points[i].x;
+    const dy = points[i + 1].y - points[i].y;
+    totalLen += Math.sqrt(dx * dx + dy * dy);
+  }
+
+  const targetDist = totalLen / 2;
+  let walked = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const dx = points[i + 1].x - points[i].x;
+    const dy = points[i + 1].y - points[i].y;
+    const segLen = Math.sqrt(dx * dx + dy * dy);
+    if (walked + segLen >= targetDist) {
+      const t = (targetDist - walked) / segLen;
+      return {
+        x: points[i].x + dx * t,
+        y: points[i].y + dy * t - 8
+      };
+    }
+    walked += segLen;
+  }
+  // Fallback
+  const mid = Math.floor(points.length / 2);
+  return { x: points[mid].x, y: points[mid].y - 8 };
+}
+
+function deconflictLabels(labels) {
+  // Simple greedy nudge: if two labels overlap, push them apart vertically
+  const gap = 18;
+  for (let i = 0; i < labels.length; i++) {
+    for (let j = i + 1; j < labels.length; j++) {
+      const dx = Math.abs(labels[i].x - labels[j].x);
+      const dy = Math.abs(labels[i].y - labels[j].y);
+      if (dx < 70 && dy < gap) {
+        labels[j].y += gap - dy;
+      }
+    }
+  }
+}
+
+// --- Main draw function ---
 
 function drawConnections() {
   const svg = document.getElementById('connections');
@@ -996,38 +1325,113 @@ function drawConnections() {
   if (defs) svg.appendChild(defs);
   if (!connectionsVisible) return;
 
-  CONNECTIONS.forEach(conn => {
-    const fromEl = document.getElementById('card-' + conn.from);
-    const toEl = document.getElementById('card-' + conn.to);
-    if (!fromEl || !toEl || fromEl.style.display === 'none' || toEl.style.display === 'none') return;
-    const fromCenter = getCardCenter(conn.from);
-    const toCenter = getCardCenter(conn.to);
-    const fromPt = getCardEdgePoint(conn.from, toCenter);
-    const toPt = getCardEdgePoint(conn.to, fromCenter);
+  const cardRects = getCardRects();
+  const rectMap = new Map(cardRects.map(r => [r.id, r]));
 
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    line.setAttribute('x1', fromPt.x);
-    line.setAttribute('y1', fromPt.y);
-    line.setAttribute('x2', toPt.x);
-    line.setAttribute('y2', toPt.y);
-    line.setAttribute('marker-end', 'url(#arrowhead)');
-    svg.appendChild(line);
+  // Pre-compute sides and assign spread offsets
+  const edgeInfos = [];
+  const portCounts = new Map(); // key: "cardId:side" → count of connections using it
+
+  CONNECTIONS.forEach(conn => {
+    const fromRect = rectMap.get(conn.from);
+    const toRect = rectMap.get(conn.to);
+    if (!fromRect || !toRect) return;
+
+    const exitSide = pickExitSide(fromRect, toRect);
+    const entrySide = pickExitSide(toRect, fromRect);
+
+    const exitKey = conn.from + ':' + exitSide;
+    const entryKey = conn.to + ':' + entrySide;
+    portCounts.set(exitKey, (portCounts.get(exitKey) || 0) + 1);
+    portCounts.set(entryKey, (portCounts.get(entryKey) || 0) + 1);
+
+    edgeInfos.push({ conn, fromRect, toRect, exitSide, entrySide, exitKey, entryKey });
+  });
+
+  // Assign slot indices per port, sorted by opposite endpoint position
+  // For horizontal sides (top/bottom): sort by x of other endpoint
+  // For vertical sides (left/right): sort by y of other endpoint
+  const portGroups = new Map(); // key → array of edge indices
+  edgeInfos.forEach((info, idx) => {
+    if (!portGroups.has(info.exitKey)) portGroups.set(info.exitKey, []);
+    portGroups.get(info.exitKey).push({ idx, role: 'exit' });
+    if (!portGroups.has(info.entryKey)) portGroups.set(info.entryKey, []);
+    portGroups.get(info.entryKey).push({ idx, role: 'entry' });
+  });
+
+  portGroups.forEach((members, portKey) => {
+    const side = portKey.split(':')[1];
+    const isHorizontal = (side === 'top' || side === 'bottom');
+
+    members.sort((a, b) => {
+      const infoA = edgeInfos[a.idx];
+      const infoB = edgeInfos[b.idx];
+      // Sort by position of the OTHER endpoint
+      const rectA = a.role === 'exit' ? infoA.toRect : infoA.fromRect;
+      const rectB = b.role === 'exit' ? infoB.toRect : infoB.fromRect;
+      if (isHorizontal) {
+        return (rectA.x + rectA.w / 2) - (rectB.x + rectB.w / 2);
+      }
+      return (rectA.y + rectA.h / 2) - (rectB.y + rectB.h / 2);
+    });
+
+    members.forEach((member, slot) => {
+      if (member.role === 'exit') {
+        edgeInfos[member.idx].exitSlot = slot;
+      } else {
+        edgeInfos[member.idx].entrySlot = slot;
+      }
+    });
+  });
+
+  const grid = buildGrid(cardRects);
+  const labels = [];
+
+  edgeInfos.forEach(info => {
+    const { conn, fromRect, toRect, exitSide, entrySide, exitKey, entryKey } = info;
+    const exitTotal = portCounts.get(exitKey);
+    const entryTotal = portCounts.get(entryKey);
+
+    // Spread offsets: evenly distributed in the middle 60% of the side
+    const exitOffset = spreadOffset(info.exitSlot, exitTotal);
+    const entryOffset = spreadOffset(info.entrySlot, entryTotal);
+
+    const route = routeEdge(fromRect, toRect, grid, exitSide, entrySide, exitOffset, entryOffset);
+    const pts = route.points;
+
+    // Draw polyline
+    const pathData = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ',' + p.y).join(' ');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', pathData);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'var(--border)');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('marker-end', 'url(#arrowhead)');
+    svg.appendChild(path);
 
     if (conn.label) {
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', (fromPt.x + toPt.x) / 2);
-      text.setAttribute('y', (fromPt.y + toPt.y) / 2 - 6);
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('class', 'conn-label');
-      text.textContent = conn.label;
-      svg.appendChild(text);
+      const pos = placeLabelOnPath(pts);
+      labels.push({ ...pos, text: conn.label });
     }
+  });
+
+  // Deconflict and render labels
+  deconflictLabels(labels);
+  labels.forEach(lbl => {
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', lbl.x);
+    text.setAttribute('y', lbl.y);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('class', 'conn-label');
+    text.textContent = lbl.text;
+    svg.appendChild(text);
   });
 }
 
-function toggleConnections() {
-  connectionsVisible = !connectionsVisible;
-  drawConnections();
+function spreadOffset(slot, total) {
+  // Distribute connections in the middle 60% of the side (0.2 to 0.8)
+  if (total === 1) return 0.5;
+  return 0.2 + (slot / (total - 1)) * 0.6;
 }
 
 // Reset

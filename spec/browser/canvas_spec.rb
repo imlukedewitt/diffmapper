@@ -45,15 +45,15 @@ RSpec.describe "Canvas HTML", type: :browser do
 
   it "shows connection lines" do
     visit_generated_html
-    expect(page).to have_css("svg.connections line", minimum: 1)
+    expect(page).to have_css("svg.connections path", minimum: 1)
   end
 
   it "toggles connection lines" do
     visit_generated_html
     click_button "Toggle Lines"
-    expect(page).not_to have_css("svg.connections line")
+    expect(page).not_to have_css("svg.connections path")
     click_button "Toggle Lines"
-    expect(page).to have_css("svg.connections line", minimum: 1)
+    expect(page).to have_css("svg.connections path", minimum: 1)
   end
 
   context "with enriched data" do
