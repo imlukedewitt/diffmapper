@@ -327,7 +327,9 @@ RSpec.describe "Canvas HTML", type: :browser do
     it "shows file path below filename" do
       visit_generated_html
       expect(page).to have_css(".sidebar-file-item .file-name", minimum: 1)
-      expect(page).to have_css(".sidebar-file-item .file-path", minimum: 1)
+      item = first(".sidebar-file-item")
+      item.hover
+      expect(item).to have_css(".file-path")
     end
 
     it "shows review progress counter" do

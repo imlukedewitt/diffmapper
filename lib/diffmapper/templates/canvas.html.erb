@@ -557,6 +557,9 @@
     color: var(--text-dim);
     padding: 10px 12px 4px;
     letter-spacing: 0.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .sidebar-file-item {
     display: flex;
@@ -588,6 +591,13 @@
     white-space: nowrap;
     color: var(--text-dim);
     font-size: 10px;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.15s, opacity 0.15s;
+  }
+  .sidebar-file-item:hover .file-path {
+    max-height: 20px;
+    opacity: 1;
   }
   .sidebar-file-item .file-info {
     flex: 1;
@@ -2010,6 +2020,12 @@ function applyTypeFilters() {
   drawConnections();
 }
 
+function formatGroupHeader(dir) {
+  const parts = dir.split('/');
+  if (parts.length <= 2) return dir.toUpperCase().replace(/\//g, ' / ');
+  return ('\u2026 / ' + parts.slice(-2).join(' / ')).toUpperCase();
+}
+
 function renderFilesList(container) {
   const allFiles = Array.from(FILES_BY_ID.values());
   const visibleFiles = allFiles.filter(f => !hiddenTypes.has(f.type || 'other'));
@@ -2029,7 +2045,7 @@ function renderFilesList(container) {
   });
 
   groups.forEach((files, dir) => {
-    html += `<div class="sidebar-group-header">${dir.toUpperCase().replace(/\//g, ' / ')}</div>`;
+    html += `<div class="sidebar-group-header">${formatGroupHeader(dir)}</div>`;
     files.forEach(file => {
       const reviewed = reviewedFiles.has(file.id);
       const card = document.getElementById('card-' + file.id);
