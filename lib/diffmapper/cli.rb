@@ -103,11 +103,6 @@ module Diffmapper
           git diff --no-ext-diff | diffmapper         Pipe diff in
       MSG
     end
-
-    def usage
-      warn usage_message
-      exit 1
-    end
   end
 
   # Wraps Parser to inject meta overrides

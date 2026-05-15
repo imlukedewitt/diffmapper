@@ -736,7 +736,7 @@
          id="card-<%= file[:id] %>"
          style="visibility: hidden;">
       <div class="card-header">
-        <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleCardReviewed('<%= file[:id] %>', this.checked)">
+        <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('<%= file[:id] %>', this.checked)">
         <span class="status-dot <%= status_class(file) %>"></span>
         <span class="file-badge <%= badge_class(file) %>"><%= file[:type] %></span>
         <span class="filename"><%= file[:path] %></span>
@@ -1063,7 +1063,7 @@ function layoutCards() {
   });
 
   const settings = currentLayoutSettings();
-  const nodeMap = buildMeasuredNodeMap(false);
+  const nodeMap = buildMeasuredNodeMap();
   const units = buildLayoutUnits(nodeMap);
   const edges = buildLayoutEdges(nodeMap, units);
   const components = buildLayoutComponents(units, edges);
@@ -1177,7 +1177,7 @@ function placeZone(zone, x, y, zoneGap) {
   });
 }
 
-function buildMeasuredNodeMap(readPositions = true) {
+function buildMeasuredNodeMap() {
   const cards = Array.from(document.querySelectorAll('.card'));
 
   return new Map(cards.map(el => {
@@ -1187,8 +1187,8 @@ function buildMeasuredNodeMap(readPositions = true) {
     return [id, {
       el: el,
       id: id,
-      x: readPositions ? (parseFloat(el.style.left) || 0) : 0,
-      y: readPositions ? (parseFloat(el.style.top) || 0) : 0,
+      x: 0,
+      y: 0,
       w: el.offsetWidth,
       h: el.offsetHeight,
       type: meta.type,
@@ -1673,17 +1673,6 @@ function toggleReviewed(fileId, checked) {
   saveState();
 }
 
-function toggleCardReviewed(fileId, checked) {
-  if (checked) {
-    reviewedFiles.add(fileId);
-  } else {
-    reviewedFiles.delete(fileId);
-  }
-  syncReviewedState(fileId);
-  updateSidebar();
-  saveState();
-}
-
 function syncReviewedState(fileId) {
   const card = document.getElementById('card-' + fileId);
   if (!card) return;
@@ -1715,13 +1704,6 @@ function navigateToCard(fileId) {
 // Persistence
 function saveState() {
   try {
-    const resolved = [];
-    document.querySelectorAll('.annotation-item.resolved').forEach(el => {
-      const card = el.closest('.card');
-      const text = el.querySelector('.annotation-text')?.textContent || '';
-      if (card) resolved.push({ fileId: card.id.replace('card-', ''), text: text });
-    });
-
     const annotations = {};
     document.querySelectorAll('.card').forEach(card => {
       const fileId = card.id.replace('card-', '');
