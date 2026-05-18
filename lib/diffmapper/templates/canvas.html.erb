@@ -62,7 +62,8 @@
   .top-bar .stats .additions { color: var(--green); }
   .top-bar .stats .deletions { color: var(--red); }
 
-  .top-bar .controls { margin-left: auto; display: flex; gap: 8px; }
+  .top-bar .controls { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .top-bar .controls .separator { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 
   .open-questions {
     font-size: 11px;
@@ -134,11 +135,16 @@
   .card.renamed { border-color: var(--orange-border); background: var(--orange-bg); }
 
   .card-header {
-    padding: 10px 12px 8px;
+    padding: 8px 12px;
     border-bottom: 1px solid rgba(255,255,255,0.06);
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .card-header-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
   .card-reviewed-check {
     width: 14px;
@@ -146,7 +152,6 @@
     accent-color: var(--green);
     cursor: pointer;
     flex-shrink: 0;
-    margin-top: 2px;
   }
   .card.reviewed { opacity: 0.6; }
 
@@ -154,7 +159,6 @@
     width: 8px; height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
-    margin-top: 3px;
   }
   .status-dot.new { background: var(--green); }
   .status-dot.modified { background: var(--orange); }
@@ -421,8 +425,14 @@
   }
   .connections .conn-label {
     font-size: 10px;
-    fill: var(--connection-color);
+    fill: var(--text);
     font-family: inherit;
+  }
+  .connections .conn-label-bg {
+    fill: var(--bg);
+    opacity: 0.85;
+    rx: 3;
+    ry: 3;
   }
 
   .legend {
@@ -730,10 +740,11 @@
   <span id="openQuestions" class="open-questions" style="display:none;"></span>
   <div class="controls">
     <button onclick="resetLayout()">Reset Layout</button>
-    <button onclick="tidyLayout()">Tidy Layout</button>
-    <button onclick="clearSavedState()">Clear Progress</button>
+    <span class="separator"></span>
     <button onclick="toggleAllDiffs()">Expand All Diffs</button>
-    <button onclick="toggleConnections()">Toggle Lines</button>
+    <button id="toggleConnBtn" onclick="toggleConnections()">Toggle Lines</button>
+    <span class="separator"></span>
+    <button onclick="clearSavedState()">Clear Progress</button>
   </div>
 </div>
 
@@ -747,8 +758,8 @@
 <div class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div class="sidebar-tabs">
-      <button class="sidebar-tab active" data-tab="files" onclick="switchSidebarTab('files')">Files</button>
-      <button class="sidebar-tab" data-tab="questions" onclick="switchSidebarTab('questions')">Questions</button>
+      <button class="sidebar-tab active" data-tab="files" onclick="switchSidebarTab('files')" id="tabFiles">Files</button>
+      <button class="sidebar-tab" data-tab="questions" onclick="switchSidebarTab('questions')" id="tabQuestions">Questions</button>
     </div>
   </div>
   <div class="sidebar-filters" id="sidebarFilters"></div>
@@ -770,9 +781,11 @@
          id="card-<%= file[:id] %>"
          style="visibility: hidden;">
       <div class="card-header">
-        <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('<%= file[:id] %>', this.checked)">
-        <span class="status-dot <%= status_class(file) %>"></span>
-        <span class="file-badge <%= badge_class(file) %>"><%= file[:type] %></span>
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('<%= file[:id] %>', this.checked)">
+          <span class="status-dot <%= status_class(file) %>"></span>
+          <span class="file-badge <%= badge_class(file) %>"><%= file[:type] %></span>
+        </div>
         <span class="filename" onclick="copyFilename(this, '<%= file[:path] %>')"><%= file[:path] %><span class="filename-copied">Copied!</span></span>
       </div>
       <div class="card-body">
@@ -1455,6 +1468,17 @@ function drawConnections() {
   // Deconflict and render labels
   deconflictLabels(labels);
   labels.forEach(lbl => {
+    // Estimate text width (~6px per character)
+    const textW = lbl.text.length * 6 + 8;
+    const textH = 16;
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('x', lbl.x - textW / 2);
+    bg.setAttribute('y', lbl.y - textH + 2);
+    bg.setAttribute('width', textW);
+    bg.setAttribute('height', textH);
+    bg.setAttribute('class', 'conn-label-bg');
+    svg.appendChild(bg);
+
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     text.setAttribute('x', lbl.x);
     text.setAttribute('y', lbl.y);
@@ -1472,21 +1496,8 @@ function spreadOffset(slot, total) {
 }
 
 // Reset
-let initialPositions = {};
-
-function storePositions() {
-  document.querySelectorAll('.card').forEach(card => {
-    initialPositions[card.id] = { left: card.style.left, top: card.style.top };
-  });
-}
-
 function resetLayout() {
-  document.querySelectorAll('.card').forEach(card => {
-    if (initialPositions[card.id]) {
-      card.style.left = initialPositions[card.id].left;
-      card.style.top = initialPositions[card.id].top;
-    }
-  });
+  layoutCards();
   drawConnections();
   saveState();
 }
@@ -1518,8 +1529,6 @@ function layoutCards() {
   });
 
   packZones(zones, settings);
-
-  storePositions();
 }
 
 function layoutComponentWithDagre(component, settings) {
@@ -1849,8 +1858,7 @@ function applyUnitPosition(unit) {
 
 
 function tidyLayout() {
-  layoutCards();
-  drawConnections();
+  resetLayout();
 }
 
 function toggleAllDiffs() {
@@ -1984,6 +1992,16 @@ function updateSidebar() {
   } else {
     renderQuestionsList(content);
   }
+  updateSidebarTabCounts();
+}
+
+function updateSidebarTabCounts() {
+  const fileCount = FILES_BY_ID.size;
+  const questionCount = document.querySelectorAll('.annotation-item.question:not(.resolved), .annotation-item.concern:not(.resolved)').length;
+  const tabFiles = document.getElementById('tabFiles');
+  const tabQuestions = document.getElementById('tabQuestions');
+  if (tabFiles) tabFiles.textContent = 'Files (' + fileCount + ')';
+  if (tabQuestions) tabQuestions.textContent = 'Questions' + (questionCount > 0 ? ' (' + questionCount + ')' : '');
 }
 
 function renderFilterPills() {
