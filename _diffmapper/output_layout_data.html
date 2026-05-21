@@ -32,6 +32,36 @@
     --conn-renders: #9ece6a;
     --conn-passes-prop: #e0af68;
     --conn-styles: #bb9af7;
+    --code-bg: rgba(0, 0, 0, 0.3);
+  }
+
+  [data-theme="light"] {
+    --bg: #e8e8ec;
+    --surface: #ffffff;
+    --surface-hover: #f5f5f8;
+    --border: #d0d4dc;
+    --text: #343b58;
+    --text-dim: #6b7394;
+    --text-bright: #1a1b26;
+    --green: #4e8c3f;
+    --green-bg: #edf5eb;
+    --green-border: rgba(78, 140, 63, 0.4);
+    --orange: #b36b1a;
+    --orange-bg: #fdf4e8;
+    --orange-border: rgba(179, 107, 26, 0.4);
+    --red: #c0392b;
+    --red-bg: #fcecea;
+    --red-border: rgba(192, 57, 43, 0.4);
+    --blue: #2e59a8;
+    --purple: #7c3aed;
+    --cyan: #0d7fa5;
+    --connection-color: #6b7394;
+    --conn-test: #c0392b;
+    --conn-calls: #2e59a8;
+    --conn-renders: #4e8c3f;
+    --conn-passes-prop: #b36b1a;
+    --conn-styles: #7c3aed;
+    --code-bg: rgba(0, 0, 0, 0.05);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -254,7 +284,7 @@
   .card-details {
     margin-top: 6px;
     padding: 6px 8px;
-    background: rgba(0,0,0,0.2);
+    background: var(--code-bg);
     border-radius: 4px;
     border-left: 2px solid var(--border);
   }
@@ -354,7 +384,7 @@
     width: 100%;
     padding: 4px 8px;
     font-size: 11px;
-    background: rgba(0,0,0,0.3);
+    background: var(--code-bg);
     border: 1px solid var(--border);
     color: var(--text);
     border-radius: 4px;
@@ -409,7 +439,7 @@
   .diff-content {
     margin-top: 6px;
     padding: 8px;
-    background: rgba(0,0,0,0.3);
+    background: var(--code-bg);
     border-radius: 4px;
     font-size: 11px;
     line-height: 1.5;
@@ -456,19 +486,6 @@
   .connections.has-focus .conn-label-bg.focused {
     opacity: 1;
   }
-
-  .legend {
-    position: fixed;
-    bottom: 16px; right: 16px;
-    z-index: 100;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 10px 14px;
-    font-size: 11px;
-  }
-  .legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
-  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
 
 
@@ -674,77 +691,6 @@
   }
   .sidebar-question-item.resolved .sq-text { text-decoration: line-through; color: var(--text-dim); }
 
-  .layout-tuner {
-    position: fixed;
-    left: 16px;
-    bottom: 16px;
-    width: 240px;
-    z-index: 90;
-    background: rgba(36, 40, 59, 0.96);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  }
-  .layout-tuner-header {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-bright);
-    cursor: pointer;
-    user-select: none;
-  }
-  .layout-tuner-body {
-    display: none;
-    margin-top: 8px;
-  }
-  .layout-tuner.open .layout-tuner-body {
-    display: block;
-  }
-  .layout-tuner-grid {
-    display: grid;
-    grid-template-columns: 1fr 86px;
-    gap: 6px 8px;
-    align-items: center;
-  }
-  .layout-tuner-grid label {
-    font-size: 10px;
-    color: var(--text-dim);
-  }
-  .layout-tuner-grid input {
-    width: 100%;
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 4px 6px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-family: inherit;
-  }
-  .layout-tuner-actions {
-    margin-top: 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  .layout-tuner-actions button {
-    background: var(--surface-hover);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 10px;
-    cursor: pointer;
-    font-family: inherit;
-  }
-  .layout-tuner-actions button:hover {
-    background: var(--border);
-  }
-  .layout-tuner-status {
-    margin-top: 8px;
-    min-height: 14px;
-    font-size: 10px;
-    color: var(--text-dim);
-  }
 </style>
 </head>
 <body>
@@ -762,6 +708,8 @@
     <span class="separator"></span>
     <button onclick="toggleAllDiffs()">Expand All Diffs</button>
     <button id="toggleConnBtn" onclick="toggleConnections()">Toggle Lines</button>
+    <span class="separator"></span>
+    <button id="themeBtn" onclick="cycleTheme()" title="Toggle theme">☾</button>
     <span class="separator"></span>
     <button onclick="clearSavedState()">Clear Progress</button>
   </div>
@@ -2175,39 +2123,6 @@
   </div>
 </div>
 
-<div class="legend">
-  <div class="legend-item"><div class="legend-dot" style="background: var(--green);"></div> New file</div>
-  <div class="legend-item"><div class="legend-dot" style="background: var(--orange);"></div> Modified</div>
-  <div class="legend-item"><div class="legend-dot" style="background: var(--red);"></div> Deleted</div>
-  <div style="border-top: 1px solid var(--border); margin: 6px 0;"></div>
-  <div style="font-size: 10px; color: var(--text-dim);">Drag cards to rearrange</div>
-</div>
-
-<div class="layout-tuner" id="layoutTuner">
-  <div class="layout-tuner-header" onclick="document.getElementById('layoutTuner').classList.toggle('open')">▸ Layout tuning</div>
-  <div class="layout-tuner-body">
-    <div class="layout-tuner-grid">
-      <label for="setting-nodesep">Node spacing</label>
-      <input id="setting-nodesep" type="number" min="1" step="10">
-
-      <label for="setting-ranksep">Rank spacing</label>
-      <input id="setting-ranksep" type="number" min="1" step="10">
-
-      <label for="setting-edgesep">Edge spacing</label>
-      <input id="setting-edgesep" type="number" min="1" step="5">
-
-      <label for="setting-zone-gap">Zone gap</label>
-      <input id="setting-zone-gap" type="number" min="0" step="20">
-    </div>
-    <div class="layout-tuner-actions">
-      <button onclick="applyLayoutSettings()">Apply</button>
-      <button onclick="resetLayoutSettings()">Reset Defaults</button>
-      <button onclick="copyLayoutSettings()">Copy Settings</button>
-    </div>
-    <div class="layout-tuner-status" id="layoutTunerStatus"></div>
-  </div>
-</div>
-
 <script>
 const CONNECTIONS = [{"from":"archive_controller_spec","to":"archive_controller","label":"tests","type":"test"},{"from":"bulk_actions_controller_spec","to":"bulk_actions_controller","label":"tests","type":"test"},{"from":"team_archiver_spec","to":"team_archiver","label":"tests","type":"test"},{"from":"archiver_spec","to":"archiver","label":"tests","type":"test"},{"from":"archive_controller","to":"team_archiver","label":"passes params","type":"calls"},{"from":"bulk_actions_controller","to":"archiver","label":"passes params","type":"calls"},{"from":"team_archiver","to":"archiver","label":"delegates to","type":"calls"},{"from":"archivetimeline","to":"archiveoptions","label":"showSkipCheck","type":"passes_prop"},{"from":"index","to":"archiveoptions","label":"showSkipCheck","type":"passes_prop"},{"from":"team_archiver","to":"team","label":"updates","type":"calls"},{"from":"archiver","to":"team","label":"reads","type":"calls"},{"from":"team_archiver","to":"archive_notification_job","label":"enqueues","type":"calls"},{"from":"archive_controller","to":"team_serializer","label":"renders","type":"calls"},{"from":"archive_controller","to":"permission_service","label":"checks permission","type":"calls"},{"from":"bulk_actions_controller","to":"permission_service","label":"checks permission","type":"calls"},{"from":"permission_service","to":"team","label":"reads role","type":"calls"},{"from":"team_spec","to":"team","label":"tests","type":"test"},{"from":"archive_notification_job_spec","to":"archive_notification_job","label":"tests","type":"test"},{"from":"permission_service_spec","to":"permission_service","label":"tests","type":"test"},{"from":"archive_modal","to":"archiveoptions","label":"renders","type":"passes_prop"},{"from":"archive_modal","to":"archive_button","label":"renders","type":"passes_prop"},{"from":"archiveoptions","to":"archive_button","label":"onArchive","type":"passes_prop"},{"from":"index","to":"archive_modal","label":"renders","type":"passes_prop"}];
 const GROUPS = {"paired":[[{"id":"archive_controller","type":"controller","dir":"controllers/team_projects","path":"app/controllers/team_projects/archive_controller.rb","status":"modified"},{"id":"archive_controller_spec","type":"spec","dir":"controllers/team_projects","path":"spec/controllers/team_projects/archive_controller_spec.rb","status":"modified"}],[{"id":"bulk_actions_controller","type":"controller","dir":"controllers/tasks","path":"app/controllers/tasks/bulk_actions_controller.rb","status":"modified"},{"id":"bulk_actions_controller_spec","type":"spec","dir":"controllers/tasks","path":"spec/controllers/tasks/bulk_actions_controller_spec.rb","status":"modified"}],[{"id":"team_archiver","type":"service","dir":"services/team_projects","path":"app/services/team_projects/team_archiver.rb","status":"modified"},{"id":"team_archiver_spec","type":"spec","dir":"services/team_projects","path":"spec/services/team_projects/team_archiver_spec.rb","status":"modified"}],[{"id":"archiver","type":"service","dir":"services/tasks","path":"app/services/tasks/archiver.rb","status":"modified"},{"id":"archiver_spec","type":"spec","dir":"services/tasks/archiver","path":"spec/services/tasks/archiver/archiver_spec.rb","status":"modified"}],[{"id":"team","type":"model","dir":"models","path":"app/models/team.rb","status":"modified"},{"id":"team_spec","type":"spec","dir":"models","path":"spec/models/team_spec.rb","status":"modified"}],[{"id":"archive_notification_job","type":"job","dir":"jobs","path":"app/jobs/archive_notification_job.rb","status":"new"},{"id":"archive_notification_job_spec","type":"spec","dir":"jobs","path":"spec/jobs/archive_notification_job_spec.rb","status":"new"}],[{"id":"permission_service","type":"service","dir":"services/permissions","path":"app/services/permissions/archive_permission_service.rb","status":"new"},{"id":"permission_service_spec","type":"spec","dir":"services/permissions","path":"spec/services/permissions/archive_permission_service_spec.rb","status":"new"}]],"unpaired_sources":[{"id":"archivetimeline","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/ArchiveTimeline.js","status":"modified"},{"id":"archiveoptions","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/ArchiveOptions.js","status":"modified"},{"id":"index","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/index.js","status":"modified"},{"id":"team_serializer","type":"serializer","dir":"serializers","path":"app/serializers/team_serializer.rb","status":"modified"},{"id":"add_skip_check_migration","type":"migration","dir":"db/migrate","path":"db/migrate/20240315_add_skip_completed_check_to_teams.rb","status":"new"},{"id":"routes_config","type":"config","dir":"config","path":"config/routes.rb","status":"modified"},{"id":"archive_button","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/ArchiveButton.js","status":"new"},{"id":"archive_modal","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/ArchiveModal.js","status":"new"}],"unpaired_specs":[{"id":"archiving_a_team_project_spec","type":"spec","dir":"features/projects/archiving","path":"spec/features/projects/archiving/archiving_a_team_project_spec.rb","status":"modified"},{"id":"archive_via_api_with_confirmation_spec","type":"spec","dir":"requests/api/v1/json/team_projects","path":"spec/requests/api/v1/json/team_projects/archive_via_api_with_confirmation_spec.rb","status":"modified"}]};
@@ -2216,13 +2131,12 @@ const CARD_WIDTH = 420;
 const GAP = 40;
 const PAIR_GAP = 60;
 const FILES_BY_ID = buildFileLookup();
-const DEFAULT_LAYOUT_SETTINGS = Object.freeze({
+const LAYOUT_SETTINGS = Object.freeze({
   nodesep: 120,
   ranksep: 120,
   edgesep: 120,
   zoneGap: 120
 });
-let layoutSettings = { ...DEFAULT_LAYOUT_SETTINGS };
 
 function buildFileLookup() {
   const files = [
@@ -2236,67 +2150,6 @@ function buildFileLookup() {
 
 function fileMeta(id) {
   return FILES_BY_ID.get(id) || { id: id, type: 'other', dir: 'other' };
-}
-
-function populateLayoutSettingsInputs(settings) {
-  document.getElementById('setting-nodesep').value = settings.nodesep;
-  document.getElementById('setting-ranksep').value = settings.ranksep;
-  document.getElementById('setting-edgesep').value = settings.edgesep;
-  document.getElementById('setting-zone-gap').value = settings.zoneGap;
-}
-
-function readSettingNumber(id, fallback, minValue = 0) {
-  const value = parseFloat(document.getElementById(id).value);
-  if (!Number.isFinite(value)) return fallback;
-  return Math.max(minValue, value);
-}
-
-function currentLayoutSettings() {
-  layoutSettings = {
-    nodesep: Math.round(readSettingNumber('setting-nodesep', DEFAULT_LAYOUT_SETTINGS.nodesep, 1)),
-    ranksep: Math.round(readSettingNumber('setting-ranksep', DEFAULT_LAYOUT_SETTINGS.ranksep, 1)),
-    edgesep: Math.round(readSettingNumber('setting-edgesep', DEFAULT_LAYOUT_SETTINGS.edgesep, 1)),
-    zoneGap: Math.round(readSettingNumber('setting-zone-gap', DEFAULT_LAYOUT_SETTINGS.zoneGap, 0))
-  };
-  populateLayoutSettingsInputs(layoutSettings);
-  return layoutSettings;
-}
-
-function setLayoutTunerStatus(message) {
-  document.getElementById('layoutTunerStatus').textContent = message;
-}
-
-function applyLayoutSettings() {
-  currentLayoutSettings();
-  setLayoutTunerStatus('Applied current settings');
-  tidyLayout();
-}
-
-function resetLayoutSettings() {
-  layoutSettings = { ...DEFAULT_LAYOUT_SETTINGS };
-  populateLayoutSettingsInputs(layoutSettings);
-  setLayoutTunerStatus('Reset to defaults');
-  tidyLayout();
-}
-
-async function copyLayoutSettings() {
-  const text = JSON.stringify(currentLayoutSettings(), null, 2);
-
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-    } else {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      textarea.remove();
-    }
-    setLayoutTunerStatus('Copied settings to clipboard');
-  } catch (error) {
-    setLayoutTunerStatus('Could not copy settings');
-  }
 }
 
 // Drag & drop
@@ -2894,7 +2747,7 @@ function layoutCards() {
     card.style.visibility = 'visible';
   });
 
-  const settings = currentLayoutSettings();
+  const settings = LAYOUT_SETTINGS;
   const nodeMap = buildMeasuredNodeMap();
   const units = buildLayoutUnits(nodeMap);
   const edges = buildLayoutEdges(nodeMap, units);
@@ -3076,7 +2929,7 @@ function buildComponentZones(components) {
 }
 
 function measureZone(zone) {
-  const zoneGap = layoutSettings.zoneGap || 120;
+  const zoneGap = LAYOUT_SETTINGS.zoneGap;
   zone.w = Math.max(...zone.components.map(c => c.w));
   zone.h = zone.components.reduce((sum, c, i) => sum + (i > 0 ? zoneGap : 0) + c.h, 0);
 }
@@ -3718,7 +3571,54 @@ function toggleContext() {
   setTimeout(adjustCanvasTop, 220);
 }
 
-populateLayoutSettingsInputs(layoutSettings);
+// Theme management
+function getSystemTheme() {
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  updateThemeButton(theme);
+}
+
+function updateThemeButton(theme) {
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = theme === 'light' ? '\u2600' : '\u263e';
+}
+
+function cycleTheme() {
+  const stored = localStorage.getItem('diffmapper:theme');
+  const system = getSystemTheme();
+  let next;
+
+  if (!stored) {
+    next = system === 'dark' ? 'light' : 'dark';
+  } else if (stored !== system) {
+    next = null;
+  } else {
+    next = system === 'dark' ? 'light' : 'dark';
+  }
+
+  if (next) {
+    localStorage.setItem('diffmapper:theme', next);
+    applyTheme(next);
+  } else {
+    localStorage.removeItem('diffmapper:theme');
+    applyTheme(system);
+  }
+}
+
+function initTheme() {
+  const stored = localStorage.getItem('diffmapper:theme');
+  const theme = stored || getSystemTheme();
+  applyTheme(theme);
+}
+
+initTheme();
 adjustCanvasTop();
 layoutCards();
 loadState();

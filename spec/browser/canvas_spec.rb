@@ -87,13 +87,9 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(count_card_overlaps).to eq(0)
   end
 
-  it "shows layout tuning controls" do
+  it "shows theme toggle" do
     visit_generated_html
-    expect(page).to have_css("#layoutTuner")
-    find(".layout-tuner-header").click
-    expect(page).to have_button("Apply")
-    expect(page).to have_button("Reset Defaults")
-    expect(page).to have_button("Copy Settings")
+    expect(page).to have_css("#themeBtn")
   end
 
   describe "layered layout with connections" do
