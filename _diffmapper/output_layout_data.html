@@ -2130,7 +2130,7 @@ const STORAGE_KEY = "diffmapper:Add skip-completed-check option for team project
 const CARD_WIDTH = 420;
 const GAP = 40;
 const PAIR_GAP = 60;
-const FILES_BY_ID = buildFileLookup();
+const FILES_BY_ID = typeof GROUPS !== 'undefined' ? buildFileLookup() : new Map();
 const LAYOUT_SETTINGS = Object.freeze({
   nodesep: 120,
   ranksep: 120,
@@ -2155,6 +2155,7 @@ function fileMeta(id) {
 // Drag & drop
 let dragCard = null, dragOffsetX = 0, dragOffsetY = 0, topZ = 10;
 
+if (typeof document !== 'undefined') {
 document.querySelectorAll('.card').forEach(card => {
   card.addEventListener('mousedown', (e) => {
     topZ++;
@@ -2209,6 +2210,7 @@ document.addEventListener('mouseup', () => {
     setTimeout(() => { drawConnections(); saveState(); }, 10);
   }
 });
+} // end if (typeof document !== 'undefined')
 
 // === Edge Router ===
 // Grid-based A* orthogonal router.
@@ -2446,12 +2448,12 @@ function simplifyPath(path) {
     const prev = result[result.length - 1];
     const curr = path[i];
     const next = path[i + 1];
-    // Keep point if direction changes (not collinear)
+    // Keep point if not collinear (cross product != 0)
     const dx1 = curr.col - prev.col;
     const dy1 = curr.row - prev.row;
-    const dx2 = next.col - curr.col;
-    const dy2 = next.row - curr.row;
-    if (dx1 !== dx2 || dy1 !== dy2) result.push(curr);
+    const dx2 = next.col - prev.col;
+    const dy2 = next.row - prev.row;
+    if (dx1 * dy2 - dy1 * dx2 !== 0) result.push(curr);
   }
   result.push(path[path.length - 1]);
   return result;
@@ -3674,6 +3676,7 @@ function initTheme() {
   applyTheme(theme);
 }
 
+if (typeof document !== 'undefined') {
 initTheme();
 adjustCanvasTop();
 layoutCards();
@@ -3689,6 +3692,18 @@ document.querySelectorAll('details').forEach(d => {
 // Redraw connections when cards are resized
 const cardResizeObserver = new ResizeObserver(() => { drawConnections(); saveState(); });
 document.querySelectorAll('.card').forEach(card => cardResizeObserver.observe(card));
+}
+
+// Export pure functions for testing (Node.js)
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    buildGrid, worldToGrid, gridToWorld, astar, simplifyPath,
+    pickExitSide, sideAnchor, cardEdgePoint, spreadOffset,
+    placeLabelOnPath, deconflictLabels, connColor, connMarker,
+    buildConnectedComponents, formatGroupHeader, unblockNearPoint, restoreCells
+  };
+}
+
 </script>
 </body>
 </html>

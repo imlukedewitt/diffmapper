@@ -10,6 +10,7 @@ module Diffmapper
     param :data
 
     TEMPLATE_PATH = File.join(__dir__, "templates", "canvas.html.erb")
+    TEMPLATE_DIR = File.join(__dir__, "templates")
 
     def call
       template = File.read(TEMPLATE_PATH)
