@@ -1,0 +1,3653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Add skip-completed-check option for team project archiving</title>
+<script src="https://dagrejs.github.io/project/dagre/latest/dagre.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #24283b;
+    --surface-hover: #292e42;
+    --border: #414868;
+    --text: #c0caf5;
+    --text-dim: #565f89;
+    --text-bright: #e0e6ff;
+    --green: #9ece6a;
+    --green-bg: #1e2718;
+    --green-border: rgba(158, 206, 106, 0.5);
+    --orange: #e0af68;
+    --orange-bg: #2a2518;
+    --orange-border: rgba(224, 175, 104, 0.5);
+    --red: #f7768e;
+    --red-bg: #2a1a1e;
+    --red-border: rgba(247, 118, 142, 0.5);
+    --blue: #7aa2f7;
+    --purple: #bb9af7;
+    --cyan: #7dcfff;
+    --connection-color: #7a88b0;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  .top-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .top-bar h1 { font-size: 14px; font-weight: 600; color: var(--text-bright); }
+
+  .top-bar .stats {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .top-bar .stats span { margin-right: 12px; }
+  .top-bar .stats .additions { color: var(--green); }
+  .top-bar .stats .deletions { color: var(--red); }
+
+  .top-bar .controls { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .top-bar .controls .separator { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+
+  .open-questions {
+    font-size: 11px;
+    color: var(--orange);
+    font-weight: 500;
+    padding: 2px 8px;
+    background: rgba(224, 175, 104, 0.1);
+    border-radius: 4px;
+  }
+
+  .top-bar button {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .top-bar button:hover { background: var(--border); }
+
+  .canvas {
+    position: absolute;
+    top: 46px; left: 0; right: 320px; bottom: 0;
+    overflow: auto;
+  }
+  .canvas.with-context {
+    top: 46px; /* adjusted by JS after context bar renders */
+  }
+
+  .canvas-inner {
+    position: relative;
+    min-width: 2000px;
+    min-height: 2000px;
+    padding: 30px;
+  }
+
+  .connections {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .card {
+    position: absolute;
+    width: 420px;
+    min-width: 200px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    z-index: 10;
+    cursor: grab;
+    user-select: none;
+    transition: box-shadow 0.15s;
+    resize: both;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .card:hover { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); }
+  .card.dragging { cursor: grabbing; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); z-index: 50; opacity: 0.95; }
+
+  .card.new { border-color: var(--green-border); background: var(--green-bg); }
+  .card.modified { border-color: var(--orange-border); background: var(--orange-bg); }
+  .card.deleted { border-color: var(--red-border); background: var(--red-bg); }
+  .card.renamed { border-color: var(--orange-border); background: var(--orange-bg); }
+
+  .card-header {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .card-header-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .card-reviewed-check {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--green);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .card.reviewed { opacity: 0.6; }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-dot.new { background: var(--green); }
+  .status-dot.modified { background: var(--orange); }
+  .status-dot.deleted { background: var(--red); }
+  .status-dot.renamed { background: var(--orange); }
+
+  .file-badge {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .badge-model { background: rgba(187, 154, 247, 0.2); color: var(--purple); }
+  .badge-controller { background: rgba(122, 162, 247, 0.2); color: var(--blue); }
+  .badge-serializer { background: rgba(125, 207, 255, 0.2); color: var(--cyan); }
+  .badge-service { background: rgba(125, 207, 255, 0.2); color: var(--cyan); }
+  .badge-config { background: rgba(224, 175, 104, 0.2); color: var(--orange); }
+  .badge-component { background: rgba(158, 206, 106, 0.2); color: var(--green); }
+  .badge-styles { background: rgba(187, 154, 247, 0.15); color: #c4a7f7; }
+  .badge-spec { background: rgba(247, 118, 142, 0.2); color: var(--red); }
+  .badge-migration { background: rgba(224, 175, 104, 0.2); color: var(--orange); }
+  .badge-job { background: rgba(125, 207, 255, 0.2); color: var(--cyan); }
+  .badge-other { background: rgba(86, 95, 137, 0.3); color: var(--text-dim); }
+
+  .filename {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-bright);
+    word-break: break-all;
+    line-height: 1.4;
+    cursor: pointer;
+  }
+  .filename:hover { text-decoration: underline; }
+  .filename-copied {
+    font-size: 9px;
+    color: var(--green);
+    margin-left: 6px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .filename-copied.show { opacity: 1; }
+
+  .card-body {
+    padding: 10px 12px;
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.6;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .line-counts {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .line-counts .add { color: var(--green); }
+  .line-counts .del { color: var(--red); }
+
+  .changed-section {
+    font-size: 11px;
+    color: var(--cyan);
+    padding: 1px 0;
+    font-style: italic;
+  }
+
+  .card-summary {
+    margin-top: 6px;
+    font-size: 12px;
+  }
+  [contenteditable]:hover {
+    outline: 1px dashed var(--border);
+    outline-offset: 2px;
+  }
+  [contenteditable]:focus {
+    outline: 1px solid var(--blue);
+    outline-offset: 2px;
+  }
+
+  .card-details {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    border-left: 2px solid var(--border);
+  }
+  .card-details summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .card-details summary:hover { color: var(--text); }
+  .card-details .detail-content {
+    margin-top: 4px;
+    font-size: 11px;
+  }
+
+  .annotation {
+    margin-top: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .annotation.note { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
+  .annotation.observation { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
+  .annotation.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
+  .annotation.concern { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
+
+  .card-annotations {
+    margin-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    padding-top: 6px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .annotation-item {
+    padding: 4px 8px;
+    margin-bottom: 4px;
+    border-radius: 4px;
+    font-size: 11px;
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .annotation-item.note { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
+  .annotation-item.observation { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
+  .annotation-item.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
+  .annotation-item.concern { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
+  .annotation-item.resolved { opacity: 0.5; }
+  .annotation-item.resolved .annotation-text { text-decoration: line-through; }
+  .annotation-resolve {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    padding: 0 2px;
+  }
+  .annotation-item:hover .annotation-resolve { opacity: 0.7; }
+  .annotation-resolve:hover { opacity: 1 !important; }
+  .annotation-text {
+    flex: 1;
+    cursor: text;
+  }
+  .annotation-delete {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    padding: 0 2px;
+  }
+  .annotation-item:hover .annotation-delete { opacity: 0.7; }
+  .annotation-delete:hover { opacity: 1 !important; }
+  .add-annotation-btn {
+    margin-top: 4px;
+    padding: 3px 8px;
+    font-size: 10px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    width: 100%;
+    text-align: left;
+  }
+  .add-annotation-btn:hover { border-color: var(--text-dim); color: var(--text); }
+  .annotation-input-area { margin-top: 4px; }
+  .annotation-input {
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 11px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 32px;
+  }
+  .annotation-input:focus { outline: none; border-color: var(--blue); }
+  .annotation-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .annotation-actions button {
+    padding: 2px 8px;
+    font-size: 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+    border: 1px solid var(--border);
+  }
+  .annotation-save { background: rgba(122,162,247,0.2); color: var(--blue); }
+  .annotation-save:hover { background: rgba(122,162,247,0.3); }
+  .annotation-cancel { background: transparent; color: var(--text-dim); }
+  .annotation-cancel:hover { color: var(--text); }
+  .annotation-type-select {
+    padding: 2px 4px;
+    font-size: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 3px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .card-diff {
+    margin-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    padding-top: 6px;
+    max-width: 100%;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .card-diff summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+  .card-diff summary:hover { color: var(--text); }
+  .diff-content {
+    margin-top: 6px;
+    padding: 8px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-x: auto;
+    overflow-y: auto;
+    white-space: pre;
+    word-break: keep-all;
+  }
+  .diff-line-add { color: var(--green); }
+  .diff-line-del { color: var(--red); }
+  .diff-line-hunk { color: var(--blue); font-weight: 500; }
+  .diff-line-ctx { color: var(--text-dim); }
+
+  .connections line {
+    stroke: var(--connection-color);
+    stroke-width: 1.5;
+    stroke-dasharray: 6, 4;
+  }
+  .connections .conn-label {
+    font-size: 10px;
+    fill: var(--text);
+    font-family: inherit;
+  }
+  .connections .conn-label-bg {
+    fill: var(--bg);
+    opacity: 0.85;
+    rx: 3;
+    ry: 3;
+  }
+
+  .legend {
+    position: fixed;
+    bottom: 16px; right: 16px;
+    z-index: 100;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 11px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+
+
+  .context-bar {
+    position: fixed;
+    top: 46px; left: 0; right: 0;
+    z-index: 99;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 20px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease, padding 0.2s ease;
+  }
+  .context-bar.empty { display: none; }
+  .context-bar.open {
+    max-height: 200px;
+    padding: 10px 20px;
+  }
+  .context-description {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .context-toggle {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 4px 6px;
+    font-family: inherit;
+  }
+  .context-toggle:hover { color: var(--text); }
+
+  .sidebar {
+    position: fixed;
+    top: 46px;
+    right: 0;
+    width: 320px;
+    height: calc(100vh - 46px);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+  }
+  .sidebar.open { display: flex; }
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+  }
+  .sidebar-tabs { display: flex; gap: 4px; flex: 1; }
+  .sidebar-tab {
+    padding: 4px 10px;
+    font-size: 11px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .sidebar-tab.active { background: var(--surface-hover); color: var(--text); border-color: var(--text-dim); }
+  .sidebar-tab:hover { color: var(--text); }
+  .sidebar-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-filter-pill {
+    padding: 2px 8px;
+    font-size: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    text-transform: uppercase;
+  }
+  .sidebar-filter-pill.active { background: var(--surface-hover); color: var(--text); border-color: var(--text-dim); }
+  .sidebar-filter-pill:hover { color: var(--text); }
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .sidebar-progress {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-check-all {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .sidebar-check-all:hover { color: var(--text); border-color: var(--text-dim); }
+  .sidebar-group-header {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-dim);
+    padding: 10px 12px 4px;
+    letter-spacing: 0.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sidebar-file-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+  }
+  .sidebar-file-item:hover { background: var(--surface-hover); }
+  .sidebar-file-item.reviewed { opacity: 0.5; }
+  .sidebar-file-item .file-check {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--green);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .sidebar-file-item .file-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    font-size: 12px;
+  }
+  .sidebar-file-item .file-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-dim);
+    font-size: 10px;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.15s, opacity 0.15s;
+  }
+  .sidebar-file-item:hover .file-path {
+    max-height: 20px;
+    opacity: 1;
+  }
+  .sidebar-file-item .file-info {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .sidebar-file-item .file-badge-mini {
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .sidebar-file-item .question-indicator {
+    font-size: 10px;
+    color: var(--blue);
+    flex-shrink: 0;
+  }
+  .sidebar-file-item.has-new { border-left-color: #73d677; }
+  .sidebar-file-item.has-modified { border-left-color: #f0a020; }
+  .sidebar-file-item.has-deleted { border-left-color: var(--red); }
+  .sidebar-question-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+  }
+  .sidebar-question-item:hover { background: var(--surface-hover); }
+  .sidebar-question-item.resolved { opacity: 0.5; }
+  .sidebar-question-item .sq-file {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sidebar-question-item .sq-text {
+    color: var(--blue);
+    font-size: 11px;
+  }
+  .sidebar-question-item.resolved .sq-text { text-decoration: line-through; color: var(--text-dim); }
+
+  .layout-tuner {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    width: 240px;
+    z-index: 90;
+    background: rgba(36, 40, 59, 0.96);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  .layout-tuner-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-bright);
+    cursor: pointer;
+    user-select: none;
+  }
+  .layout-tuner-body {
+    display: none;
+    margin-top: 8px;
+  }
+  .layout-tuner.open .layout-tuner-body {
+    display: block;
+  }
+  .layout-tuner-grid {
+    display: grid;
+    grid-template-columns: 1fr 86px;
+    gap: 6px 8px;
+    align-items: center;
+  }
+  .layout-tuner-grid label {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .layout-tuner-grid input {
+    width: 100%;
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: inherit;
+  }
+  .layout-tuner-actions {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .layout-tuner-actions button {
+    background: var(--surface-hover);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .layout-tuner-actions button:hover {
+    background: var(--border);
+  }
+  .layout-tuner-status {
+    margin-top: 8px;
+    min-height: 14px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>Add skip-completed-check option for team project archiving</h1>
+  <div class="stats">
+    <span class="additions">+356</span>
+    <span class="deletions">-13</span>
+    <span class="files-toggle" onclick="toggleSidebar('files')" style="cursor:pointer;">24 files</span>
+  </div>
+  <span id="openQuestions" class="open-questions" style="display:none;"></span>
+  <div class="controls">
+    <button onclick="resetLayout()">Reset Layout</button>
+    <span class="separator"></span>
+    <button onclick="toggleAllDiffs()">Expand All Diffs</button>
+    <button id="toggleConnBtn" onclick="toggleConnections()">Toggle Lines</button>
+    <span class="separator"></span>
+    <button onclick="clearSavedState()">Clear Progress</button>
+  </div>
+</div>
+
+<div class="context-bar empty" id="contextBar">
+</div>
+
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-tabs">
+      <button class="sidebar-tab active" data-tab="files" onclick="switchSidebarTab('files')" id="tabFiles">Files</button>
+      <button class="sidebar-tab" data-tab="questions" onclick="switchSidebarTab('questions')" id="tabQuestions">Questions</button>
+    </div>
+  </div>
+  <div class="sidebar-filters" id="sidebarFilters"></div>
+  <div class="sidebar-content" id="sidebarContent"></div>
+</div>
+
+<div class="canvas" id="canvas">
+  <div class="canvas-inner" id="canvasInner" style="min-height: 3080px;">
+    <svg class="connections" id="connections">
+      <defs>
+        <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="var(--connection-color)" />
+        </marker>
+      </defs>
+    </svg>
+
+    <div class="card modified"
+         id="card-archive_controller"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archive_controller', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-controller">controller</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'app/controllers/team_projects/archive_controller.rb')">app/controllers/team_projects/archive_controller.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+2</span>
+          <span class="del">-1</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Pass skip_completed_check from params into service options</div>
+        <details class="card-details">
+          <summary>archive_params</summary>
+          <div class="detail-content" contenteditable="true">Permit and forward the new flag.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -83,7 +83,8 @@ class TeamProjects::ArchiveController &lt; ::TeamProjects::BaseController</span>
+<span class="diff-line-ctx">       preserve_attachments: boolean_value_of(archive_params[:preserve_attachments]),</span>
+<span class="diff-line-ctx">       notify_watchers:</span>
+<span class="diff-line-ctx">         boolean_value_of(archive_params[:notify_watchers]),</span>
+<span class="diff-line-del">-      include_subtasks: boolean_value_of(params[:include_subtasks])</span>
+<span class="diff-line-add">+      include_subtasks: boolean_value_of(params[:include_subtasks]),</span>
+<span class="diff-line-add">+      skip_completed_check: boolean_value_of(params[:skip_completed_check])</span>
+<span class="diff-line-ctx">     }</span>
+<span class="diff-line-ctx">   end</span>
+<span class="diff-line-ctx"> </span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-bulk_actions_controller"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('bulk_actions_controller', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-controller">controller</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'app/controllers/tasks/bulk_actions_controller.rb')">app/controllers/tasks/bulk_actions_controller.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+1</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Thread skip_completed_check into the Archiver service call</div>
+        <details class="card-details">
+          <summary>service instantiation</summary>
+          <div class="detail-content" contenteditable="true">Adds the new boolean beside existing options.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -92,6 +92,7 @@ class Tasks::BulkActionsController &lt; ApplicationController</span>
+<span class="diff-line-ctx">         team_project: @task.team_project,</span>
+<span class="diff-line-ctx">         archive: boolean_value_of(params[:archive]),</span>
+<span class="diff-line-ctx">         preserve_attachments: boolean_value_of(params[:preserve_attachments]),</span>
+<span class="diff-line-add">+        skip_completed_check: boolean_value_of(params[:skip_completed_check]),</span>
+<span class="diff-line-ctx">       )</span>
+<span class="diff-line-ctx">       Adapters::BulkActionsController::TeamArchiverAdapter.new(</span>
+<span class="diff-line-ctx">         service: service,</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-team_archiver"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('team_archiver', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-service">service</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'app/services/team_projects/team_archiver.rb')">app/services/team_projects/team_archiver.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+2</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Accept and forward skip_completed_check to member archives</div>
+        <details class="card-details">
+          <summary>attribute: skip_completed_check</summary>
+          <div class="detail-content" contenteditable="true">Stores the flag on the service object.</div>
+        </details>
+        <details class="card-details">
+          <summary>member archiving</summary>
+          <div class="detail-content" contenteditable="true">Passes the flag through when archiving members.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -10,6 +10,7 @@ module TeamProjects</span>
+<span class="diff-line-ctx">     attribute :preserve_attachments, Types::Params::Bool.default(false)</span>
+<span class="diff-line-ctx">     attribute :notify_watchers, Types::Params::Bool.default(true)</span>
+<span class="diff-line-add">+    attribute :skip_completed_check, Types::Params::Bool.default(false)</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-ctx">     def call</span>
+<span class="diff-line-ctx">       result = process_parent_project</span>
+<span class="diff-line-hunk">@@ -42,6 +43,7 @@ module TeamProjects</span>
+<span class="diff-line-ctx">           archive: true,</span>
+<span class="diff-line-ctx">           preserve_attachments: preserve_attachments,</span>
+<span class="diff-line-add">+          skip_completed_check: skip_completed_check,</span>
+<span class="diff-line-ctx">         )</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-archiver"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archiver', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-service">service</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'app/services/tasks/archiver.rb')">app/services/tasks/archiver.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+17</span>
+          <span class="del">-1</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Use skip_completed_check when archiving tasks</div>
+        <details class="card-details">
+          <summary>completed-task guard</summary>
+          <div class="detail-content" contenteditable="true">Lets the archiver bypass the completion gate.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -8,7 +8,7 @@ module Tasks</span>
+<span class="diff-line-ctx">     attribute :task, Types.Instance(Task)</span>
+<span class="diff-line-ctx">     attribute :archive, Types::Params::Bool.default(false)</span>
+<span class="diff-line-ctx">     attribute :preserve_attachments, Types::Params::Bool.default(false)</span>
+<span class="diff-line-del">-</span>
+<span class="diff-line-add">+    attribute :skip_completed_check, Types::Params::Bool.default(false)</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-ctx">     def call</span>
+<span class="diff-line-ctx">       return failure(&quot;Task cannot be archived&quot;) unless task.archivable?</span>
+<span class="diff-line-hunk">@@ -30,6 +31,22 @@ module Tasks</span>
+<span class="diff-line-ctx">         task.update!(status: :archived, archived_at: Time.current)</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-add">+      def maybe_skip_validation</span>
+<span class="diff-line-add">+        return unless skip_completed_check</span>
+<span class="diff-line-add">+        return unless incomplete_subtasks?</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        task.subtasks.incomplete.each do |subtask|</span>
+<span class="diff-line-add">+          subtask.force_complete!</span>
+<span class="diff-line-add">+        end</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      def incomplete_subtasks?</span>
+<span class="diff-line-add">+        return false if task.team_project.blank?</span>
+<span class="diff-line-add">+        return false if task.standalone?</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        task.subtasks.incomplete.exists?</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-ctx">       def process_archive</span>
+<span class="diff-line-ctx">         ActiveRecord::Base.transaction do</span>
+<span class="diff-line-ctx">           validate_task!</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-archivetimeline"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archivetimeline', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-component">component</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'frontend/js/ProjectArchive/ArchiveTimeline.js')">frontend/js/ProjectArchive/ArchiveTimeline.js<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+3</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Compute whether to show the skip-check option</div>
+        <details class="card-details">
+          <summary>isParentProject / showSkipCheck</summary>
+          <div class="detail-content" contenteditable="true">Derives UI visibility from project type.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -15,6 +15,9 @@ const ArchiveTimeline = ({ project, options, onUpdate }) =&gt; {</span>
+<span class="diff-line-ctx">   const [selectedDate, setSelectedDate] = useState(null);</span>
+<span class="diff-line-ctx">   const [showOptions, setShowOptions] = useState(false);</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-add">+  const isParentProject = project.id === project.teamProjectParentId;</span>
+<span class="diff-line-add">+  const showSkipCheck = !isParentProject &amp;&amp; options.hasIncompleteSubtasks;</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-ctx">   return (</span>
+<span class="diff-line-ctx">     &lt;div className=&quot;archive-timeline&quot;&gt;</span>
+<span class="diff-line-ctx">       &lt;TimelineSelector</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-archiveoptions"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archiveoptions', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-component">component</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'frontend/js/ProjectArchive/ArchiveOptions.js')">frontend/js/ProjectArchive/ArchiveOptions.js<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+16</span>
+          <span class="del">-1</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Render 'Skip completion check' checkbox conditionally</div>
+        <details class="card-details">
+          <summary>showSkipCheck prop</summary>
+          <div class="detail-content" contenteditable="true">Only renders the checkbox when enabled.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -1,7 +1,7 @@</span>
+<span class="diff-line-ctx"> import React from &#39;react&#39;;</span>
+<span class="diff-line-ctx"> import PropTypes from &#39;prop-types&#39;;</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-del">-const ArchiveOptions = ({ options, onChange }) =&gt; {</span>
+<span class="diff-line-add">+const ArchiveOptions = ({ options, onChange, showSkipCheck }) =&gt; {</span>
+<span class="diff-line-ctx">   return (</span>
+<span class="diff-line-ctx">     &lt;div className=&quot;archive-options&quot;&gt;</span>
+<span class="diff-line-ctx">       &lt;label&gt;</span>
+<span class="diff-line-hunk">@@ -18,6 +18,19 @@ const ArchiveOptions = ({ options, onChange }) =&gt; {</span>
+<span class="diff-line-ctx">           Preserve attachments</span>
+<span class="diff-line-ctx">         &lt;/label&gt;</span>
+<span class="diff-line-ctx">       &lt;/div&gt;</span>
+<span class="diff-line-add">+      {showSkipCheck &amp;&amp; (</span>
+<span class="diff-line-add">+        &lt;div className=&quot;option-group&quot;&gt;</span>
+<span class="diff-line-add">+          &lt;label&gt;</span>
+<span class="diff-line-add">+            &lt;input</span>
+<span class="diff-line-add">+              type=&quot;checkbox&quot;</span>
+<span class="diff-line-add">+              checked={options.skipCompletedCheck}</span>
+<span class="diff-line-add">+              onChange={(e) =&gt; onChange({</span>
+<span class="diff-line-add">+                ...options,</span>
+<span class="diff-line-add">+                skipCompletedCheck: e.target.checked,</span>
+<span class="diff-line-add">+              })}</span>
+<span class="diff-line-add">+            /&gt;</span>
+<span class="diff-line-add">+            Skip completion check</span>
+<span class="diff-line-add">+          &lt;/label&gt;</span>
+<span class="diff-line-add">+        &lt;/div&gt;</span>
+<span class="diff-line-add">+      )}</span>
+<span class="diff-line-ctx">     &lt;/div&gt;</span>
+<span class="diff-line-ctx">   );</span>
+<span class="diff-line-ctx"> };</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-index"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('index', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-component">component</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'frontend/js/ProjectArchive/index.js')">frontend/js/ProjectArchive/index.js<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+1</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Pass showSkipCheck prop to ArchiveOptions</div>
+        <details class="card-details">
+          <summary>prop pass-through</summary>
+          <div class="detail-content" contenteditable="true">Threads the derived boolean into child components.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -45,6 +45,7 @@ const ProjectArchive = ({ project }) =&gt; {</span>
+<span class="diff-line-ctx">           &lt;ArchiveOptions</span>
+<span class="diff-line-ctx">             options={archiveOptions}</span>
+<span class="diff-line-ctx">             onChange={setArchiveOptions}</span>
+<span class="diff-line-add">+            showSkipCheck={showSkipCheck}</span>
+<span class="diff-line-ctx">           /&gt;</span>
+<span class="diff-line-ctx">         )}</span>
+<span class="diff-line-ctx">       &lt;/div&gt;</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-archive_controller_spec"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archive_controller_spec', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-spec">spec</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'spec/controllers/team_projects/archive_controller_spec.rb')">spec/controllers/team_projects/archive_controller_spec.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+3</span>
+          <span class="del">-1</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Verify skip_completed_check is included in service params</div>
+        <details class="card-details">
+          <summary>params assertion</summary>
+          <div class="detail-content" contenteditable="true">Confirms the controller hands the flag through.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -120,8 +120,10 @@ RSpec.describe TeamProjects::ArchiveController do</span>
+<span class="diff-line-ctx">           expect(service_params).to include(</span>
+<span class="diff-line-ctx">             preserve_attachments: false,</span>
+<span class="diff-line-ctx">             notify_watchers: true,</span>
+<span class="diff-line-del">-            include_subtasks: true</span>
+<span class="diff-line-add">+            include_subtasks: true,</span>
+<span class="diff-line-add">+            skip_completed_check: false</span>
+<span class="diff-line-ctx">           )</span>
+<span class="diff-line-add">+          expect(service_params).to have_key(:skip_completed_check)</span>
+<span class="diff-line-ctx">         end</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-bulk_actions_controller_spec"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('bulk_actions_controller_spec', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-spec">spec</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'spec/controllers/tasks/bulk_actions_controller_spec.rb')">spec/controllers/tasks/bulk_actions_controller_spec.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+2</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Verify Archiver receives skip_completed_check</div>
+        <details class="card-details">
+          <summary>hash_including</summary>
+          <div class="detail-content" contenteditable="true">Checks the service invocation includes the new option.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -85,6 +85,8 @@ RSpec.describe Tasks::BulkActionsController do</span>
+<span class="diff-line-ctx">           service = instance_double(Tasks::Archiver)</span>
+<span class="diff-line-ctx">           expect(Tasks::Archiver).to receive(:new).with(</span>
+<span class="diff-line-ctx">             hash_including(</span>
+<span class="diff-line-add">+              archive: true,</span>
+<span class="diff-line-add">+              skip_completed_check: false,</span>
+<span class="diff-line-ctx">             )</span>
+<span class="diff-line-ctx">           ).and_return(service)</span>
+<span class="diff-line-ctx">         end</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-archiving_a_team_project_spec"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archiving_a_team_project_spec', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-spec">spec</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'spec/features/projects/archiving/archiving_a_team_project_spec.rb')">spec/features/projects/archiving/archiving_a_team_project_spec.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+34</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">E2E tests for skip check UI on child projects</div>
+        <details class="card-details">
+          <summary>shows option for child projects</summary>
+          <div class="detail-content" contenteditable="true">Exercises the visible path.</div>
+        </details>
+        <details class="card-details">
+          <summary>hides for parent projects</summary>
+          <div class="detail-content" contenteditable="true">Ensures parent projects hide the control.</div>
+        </details>
+        <details class="card-details">
+          <summary>applies when selected</summary>
+          <div class="detail-content" contenteditable="true">Covers the behavior when checked.</div>
+        </details>
+        <details class="card-details">
+          <summary>unchecked by default</summary>
+          <div class="detail-content" contenteditable="true">Confirms the default form state.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+            <div class="annotation-item observation" data-annotation-type="observation">
+              <span class="annotation-text" contenteditable="true">Good coverage — tests visibility gating and actual behavior.</span>
+              <button class="annotation-delete" onclick="deleteAnnotation(this)">×</button>
+            </div>
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -45,6 +45,37 @@ RSpec.describe &quot;Archiving a team project&quot;, type: :feature do</span>
+<span class="diff-line-ctx">       expect(page).to have_content(&quot;Project archived successfully&quot;)</span>
+<span class="diff-line-ctx">     end</span>
+<span class="diff-line-ctx">   end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+  context &quot;when the project is a child of a team project&quot; do</span>
+<span class="diff-line-add">+    let(:project) { create(:project, :child, team_project: team_project) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    it &quot;shows the skip check option&quot; do</span>
+<span class="diff-line-add">+      visit archive_path(project)</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      expect(page).to have_content(&quot;Skip completion check&quot;)</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    it &quot;hides the skip check option for parent projects&quot; do</span>
+<span class="diff-line-add">+      parent = create(:project, :parent, team_project: team_project)</span>
+<span class="diff-line-add">+      visit archive_path(parent)</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      expect(page).not_to have_content(&quot;Skip completion check&quot;)</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    it &quot;skips check when selected&quot; do</span>
+<span class="diff-line-add">+      visit archive_path(project)</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      check &quot;Skip completion check&quot;</span>
+<span class="diff-line-add">+      click_button &quot;Archive Project&quot;</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      expect(page).to have_content(&quot;Project archived successfully&quot;)</span>
+<span class="diff-line-add">+      expect(project.reload.subtasks).to all(</span>
+<span class="diff-line-add">+        have_attributes(force_completed: true)</span>
+<span class="diff-line-add">+      )</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    it &quot;does not skip check by default&quot; do</span>
+<span class="diff-line-add">+      visit archive_path(project)</span>
+<span class="diff-line-add">+      expect(find_field(&quot;Skip completion check&quot;)).not_to be_checked</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+  end</span>
+<span class="diff-line-ctx"> end</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-archive_via_api_with_confirmation_spec"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archive_via_api_with_confirmation_spec', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-spec">spec</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'spec/requests/api/v1/json/team_projects/archive_via_api_with_confirmation_spec.rb')">spec/requests/api/v1/json/team_projects/archive_via_api_with_confirmation_spec.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+6</span>
+          <span class="del">-6</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Add skip_completed_check to API assertions</div>
+        <details class="card-details">
+          <summary>param changes</summary>
+          <div class="detail-content" contenteditable="true">Expands request expectations to include the new field.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -30,14 +30,14 @@ RSpec.describe &quot;Team Project Archive via API with Confirmation&quot; do</span>
+<span class="diff-line-ctx">       it &quot;initiates the archive with confirmation&quot; do</span>
+<span class="diff-line-ctx">         post api_v1_team_project_archive_path(team_project),</span>
+<span class="diff-line-ctx">           params: {</span>
+<span class="diff-line-del">-            archive: true,</span>
+<span class="diff-line-del">-            preserve_attachments: true</span>
+<span class="diff-line-add">+            archive: &quot;true&quot;,</span>
+<span class="diff-line-add">+            preserve_attachments: &quot;true&quot;,</span>
+<span class="diff-line-add">+            skip_completed_check: &quot;false&quot;</span>
+<span class="diff-line-ctx">           },</span>
+<span class="diff-line-ctx">           headers: api_headers</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-ctx">         expect(response).to have_http_status(:ok)</span>
+<span class="diff-line-del">-        expect(json_response[&quot;confirmation_token&quot;]).to be_present</span>
+<span class="diff-line-del">-        expect(json_response[&quot;status&quot;]).to eq(&quot;pending_confirmation&quot;)</span>
+<span class="diff-line-add">+        expect(json_response).to include(&quot;confirmation_token&quot;, &quot;status&quot;)</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-hunk">@@ -50,8 +50,8 @@ RSpec.describe &quot;Team Project Archive via API with Confirmation&quot; do</span>
+<span class="diff-line-ctx">       it &quot;completes the archive&quot; do</span>
+<span class="diff-line-ctx">         post complete_api_v1_team_project_archive_path(team_project),</span>
+<span class="diff-line-ctx">           params: {</span>
+<span class="diff-line-del">-            confirmation_token: &quot;tok_confirm_123&quot;,</span>
+<span class="diff-line-del">-            confirmed_by: &quot;user_abc123&quot;</span>
+<span class="diff-line-add">+            confirmation_token: &quot;tok_test_confirm&quot;,</span>
+<span class="diff-line-add">+            confirmed_by: &quot;user_test_123&quot;</span>
+<span class="diff-line-ctx">           },</span>
+<span class="diff-line-ctx">           headers: api_headers</span>
+<span class="diff-line-ctx"> </span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-team_archiver_spec"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('team_archiver_spec', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-spec">spec</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'spec/services/team_projects/team_archiver_spec.rb')">spec/services/team_projects/team_archiver_spec.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+21</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Verify team archiver forwards skip_completed_check downstream</div>
+        <details class="card-details">
+          <summary>delegation assertion</summary>
+          <div class="detail-content" contenteditable="true">Checks the nested archiver receives the new option.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -55,6 +55,26 @@ RSpec.describe TeamProjects::TeamArchiver do</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-add">+    context &quot;when skip_completed_check is true&quot; do</span>
+<span class="diff-line-add">+      let(:params) { default_params.merge(skip_completed_check: true) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      it &quot;passes skip_completed_check to member archives&quot; do</span>
+<span class="diff-line-add">+        result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        expect(result).to be_success</span>
+<span class="diff-line-add">+        expect(child_project.reload.force_completed?).to be true</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+    context &quot;when skip_completed_check is false&quot; do</span>
+<span class="diff-line-add">+      let(:params) { default_params.merge(skip_completed_check: false) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      it &quot;does not skip validation for members&quot; do</span>
+<span class="diff-line-add">+        result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        expect(result).to be_success</span>
+<span class="diff-line-add">+        expect(child_project.reload.force_completed?).to be false</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-ctx">   end</span>
+<span class="diff-line-ctx"> end</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-archiver_spec"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archiver_spec', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-spec">spec</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'spec/services/tasks/archiver/archiver_spec.rb')">spec/services/tasks/archiver/archiver_spec.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+41</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Cover archiver behavior with skip_completed_check enabled</div>
+        <details class="card-details">
+          <summary>service behavior</summary>
+          <div class="detail-content" contenteditable="true">Verifies the archiver accepts the new flag.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -80,6 +80,43 @@ RSpec.describe Tasks::Archiver do</span>
+<span class="diff-line-ctx">       end</span>
+<span class="diff-line-ctx">     end</span>
+<span class="diff-line-ctx"> </span>
+<span class="diff-line-add">+    context &quot;with skip_completed_check&quot; do</span>
+<span class="diff-line-add">+      let(:task) { create(:task, :child, team_project: team_project) }</span>
+<span class="diff-line-add">+      let(:product) { create(:product, :allows_skip_check) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      context &quot;when true and eligible&quot; do</span>
+<span class="diff-line-add">+        let(:params) { default_params.merge(skip_completed_check: true) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        it &quot;force completes incomplete subtasks&quot; do</span>
+<span class="diff-line-add">+          result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+          expect(result).to be_success</span>
+<span class="diff-line-add">+          expect(task.reload.subtasks).to all(</span>
+<span class="diff-line-add">+            have_attributes(force_completed: true)</span>
+<span class="diff-line-add">+          )</span>
+<span class="diff-line-add">+        end</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      context &quot;when true but not eligible (parent task)&quot; do</span>
+<span class="diff-line-add">+        let(:task) { create(:task, :parent, team_project: team_project) }</span>
+<span class="diff-line-add">+        let(:params) { default_params.merge(skip_completed_check: true) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        it &quot;does not force complete&quot; do</span>
+<span class="diff-line-add">+          result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+          expect(result).to be_success</span>
+<span class="diff-line-add">+          expect(task.reload.subtasks).to all(</span>
+<span class="diff-line-add">+            have_attributes(force_completed: false)</span>
+<span class="diff-line-add">+          )</span>
+<span class="diff-line-add">+        end</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+      context &quot;when false&quot; do</span>
+<span class="diff-line-add">+        let(:params) { default_params.merge(skip_completed_check: false) }</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+        it &quot;does not force complete&quot; do</span>
+<span class="diff-line-add">+          result = described_class.new(params).call</span>
+<span class="diff-line-add">+</span>
+<span class="diff-line-add">+          expect(result).to be_success</span>
+<span class="diff-line-add">+        end</span>
+<span class="diff-line-add">+      end</span>
+<span class="diff-line-add">+    end</span>
+<span class="diff-line-ctx">   end</span>
+<span class="diff-line-ctx"> end</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-team"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('team', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-model">model</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'app/models/team.rb')">app/models/team.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+8</span>
+          <span class="del">-2</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Add skip_completed_check attribute to Team</div>
+        <details class="card-details">
+          <summary>attribute</summary>
+          <div class="detail-content" contenteditable="true">Boolean flag stored on the team record.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -14,6 +14,8 @@</span>
+<span class="diff-line-ctx"> attribute :name</span>
+<span class="diff-line-ctx"> attribute :archived</span>
+<span class="diff-line-add">+attribute :skip_completed_check, :boolean, default: false</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-team_spec"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('team_spec', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-spec">spec</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'spec/models/team_spec.rb')">spec/models/team_spec.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+12</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Test skip_completed_check attribute behavior</div>
+        <details class="card-details">
+          <summary>validation</summary>
+          <div class="detail-content" contenteditable="true">Confirms default and toggle behavior.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -20,4 +20,16 @@</span>
+<span class="diff-line-add">+describe &#39;#skip_completed_check&#39; do</span>
+<span class="diff-line-add">+  it &#39;defaults to false&#39; do</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card new"
+         id="card-archive_notification_job"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archive_notification_job', this.checked)">
+          <span class="status-dot new"></span>
+          <span class="file-badge badge-job">job</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'app/jobs/archive_notification_job.rb')">app/jobs/archive_notification_job.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+25</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Send notification after archiving completes</div>
+        <details class="card-details">
+          <summary>perform</summary>
+          <div class="detail-content" contenteditable="true">Enqueues email and Slack notification for watchers.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -0,0 +1,25 @@</span>
+<span class="diff-line-add">+class ArchiveNotificationJob &lt; ApplicationJob</span>
+<span class="diff-line-add">+  def perform(team_id)</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card new"
+         id="card-archive_notification_job_spec"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archive_notification_job_spec', this.checked)">
+          <span class="status-dot new"></span>
+          <span class="file-badge badge-spec">spec</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'spec/jobs/archive_notification_job_spec.rb')">spec/jobs/archive_notification_job_spec.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+18</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Test notification job enqueuing and delivery</div>
+        <details class="card-details">
+          <summary>enqueue</summary>
+          <div class="detail-content" contenteditable="true">Verifies job queues with correct team_id.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -0,0 +1,18 @@</span>
+<span class="diff-line-add">+RSpec.describe ArchiveNotificationJob do</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-team_serializer"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('team_serializer', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-serializer">serializer</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'app/serializers/team_serializer.rb')">app/serializers/team_serializer.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+3</span>
+          <span class="del">-1</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Expose skip_completed_check in API response</div>
+        <details class="card-details">
+          <summary>attributes</summary>
+          <div class="detail-content" contenteditable="true">Adds the new flag to the serialized output.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -5,6 +5,8 @@</span>
+<span class="diff-line-ctx"> attributes :id, :name, :archived</span>
+<span class="diff-line-add">+attributes :skip_completed_check</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card new"
+         id="card-add_skip_check_migration"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('add_skip_check_migration', this.checked)">
+          <span class="status-dot new"></span>
+          <span class="file-badge badge-migration">migration</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'db/migrate/20240315_add_skip_completed_check_to_teams.rb')">db/migrate/20240315_add_skip_completed_check_to_teams.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+9</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Add skip_completed_check column to teams table</div>
+        <details class="card-details">
+          <summary>change</summary>
+          <div class="detail-content" contenteditable="true">Adds boolean column with default false.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -0,0 +1,9 @@</span>
+<span class="diff-line-add">+class AddSkipCompletedCheckToTeams &lt; ActiveRecord::Migration[7.0]</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card modified"
+         id="card-routes_config"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('routes_config', this.checked)">
+          <span class="status-dot modified"></span>
+          <span class="file-badge badge-config">config</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'config/routes.rb')">config/routes.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+2</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Add archive confirmation endpoint</div>
+        <details class="card-details">
+          <summary>route</summary>
+          <div class="detail-content" contenteditable="true">POST /team_projects/:id/archive/confirm</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -42,6 +42,8 @@</span>
+<span class="diff-line-ctx"> resources :team_projects do</span>
+<span class="diff-line-add">+  post :archive_confirm, on: :member</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card new"
+         id="card-permission_service"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('permission_service', this.checked)">
+          <span class="status-dot new"></span>
+          <span class="file-badge badge-service">service</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'app/services/permissions/archive_permission_service.rb')">app/services/permissions/archive_permission_service.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+20</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Check user permission to skip completion check</div>
+        <details class="card-details">
+          <summary>can_skip?</summary>
+          <div class="detail-content" contenteditable="true">Returns true if user has admin or project-lead role.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -0,0 +1,20 @@</span>
+<span class="diff-line-add">+module Permissions</span>
+<span class="diff-line-add">+  class ArchivePermissionService</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card new"
+         id="card-permission_service_spec"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('permission_service_spec', this.checked)">
+          <span class="status-dot new"></span>
+          <span class="file-badge badge-spec">spec</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'spec/services/permissions/archive_permission_service_spec.rb')">spec/services/permissions/archive_permission_service_spec.rb<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+30</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Test permission gating for skip check</div>
+        <details class="card-details">
+          <summary>roles</summary>
+          <div class="detail-content" contenteditable="true">Covers admin, lead, and regular user cases.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -0,0 +1,30 @@</span>
+<span class="diff-line-add">+RSpec.describe Permissions::ArchivePermissionService do</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card new"
+         id="card-archive_button"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archive_button', this.checked)">
+          <span class="status-dot new"></span>
+          <span class="file-badge badge-component">component</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'frontend/js/ProjectArchive/ArchiveButton.js')">frontend/js/ProjectArchive/ArchiveButton.js<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+35</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Confirmation button with skip-check toggle</div>
+        <details class="card-details">
+          <summary>onClick</summary>
+          <div class="detail-content" contenteditable="true">Triggers archive with current options.</div>
+        </details>
+        <details class="card-details">
+          <summary>disabled state</summary>
+          <div class="detail-content" contenteditable="true">Greys out when archiving is in progress.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -0,0 +1,35 @@</span>
+<span class="diff-line-add">+const ArchiveButton = ({ onArchive, disabled, skipCheck }) =&gt; {</span>
+</pre>
+        </details>
+      </div>
+    </div>
+    <div class="card new"
+         id="card-archive_modal"
+         style="visibility: hidden;">
+      <div class="card-header">
+        <div class="card-header-top">
+          <input type="checkbox" class="card-reviewed-check" title="Mark as reviewed" onclick="toggleReviewed('archive_modal', this.checked)">
+          <span class="status-dot new"></span>
+          <span class="file-badge badge-component">component</span>
+        </div>
+        <span class="filename" onclick="copyFilename(this, 'frontend/js/ProjectArchive/ArchiveModal.js')">frontend/js/ProjectArchive/ArchiveModal.js<span class="filename-copied">Copied!</span></span>
+      </div>
+      <div class="card-body">
+        <div class="line-counts">
+          <span class="add">+45</span>
+          <span class="del">-0</span>
+        </div>
+        <div class="card-summary" contenteditable="true">Modal dialog wrapping archive options and confirmation</div>
+        <details class="card-details">
+          <summary>renders ArchiveOptions</summary>
+          <div class="detail-content" contenteditable="true">Embeds the options component inside the modal body.</div>
+        </details>
+        <details class="card-details">
+          <summary>renders ArchiveButton</summary>
+          <div class="detail-content" contenteditable="true">Places the confirm button in the modal footer.</div>
+        </details>
+        <div class="card-annotations">
+          <div class="annotations-list">
+          </div>
+          <button class="add-annotation-btn" onclick="showAnnotationInput(this)">+ Add note</button>
+          <div class="annotation-input-area" style="display:none;">
+            <textarea class="annotation-input" placeholder="Add a note..." rows="2"></textarea>
+            <div class="annotation-actions">
+              <select class="annotation-type-select">
+                <option value="note">Note</option>
+                <option value="question">Question</option>
+              </select>
+              <button class="annotation-save" onclick="saveAnnotation(this)">Save</button>
+              <button class="annotation-cancel" onclick="cancelAnnotation(this)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <details class="card-diff" ontoggle="drawConnections()">
+          <summary>View diff</summary>
+          <pre class="diff-content"><span class="diff-line-hunk">@@ -0,0 +1,45 @@</span>
+<span class="diff-line-add">+const ArchiveModal = ({ project, onClose }) =&gt; {</span>
+</pre>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background: var(--green);"></div> New file</div>
+  <div class="legend-item"><div class="legend-dot" style="background: var(--orange);"></div> Modified</div>
+  <div class="legend-item"><div class="legend-dot" style="background: var(--red);"></div> Deleted</div>
+  <div style="border-top: 1px solid var(--border); margin: 6px 0;"></div>
+  <div style="font-size: 10px; color: var(--text-dim);">Drag cards to rearrange</div>
+</div>
+
+<div class="layout-tuner" id="layoutTuner">
+  <div class="layout-tuner-header" onclick="document.getElementById('layoutTuner').classList.toggle('open')">▸ Layout tuning</div>
+  <div class="layout-tuner-body">
+    <div class="layout-tuner-grid">
+      <label for="setting-nodesep">Node spacing</label>
+      <input id="setting-nodesep" type="number" min="1" step="10">
+
+      <label for="setting-ranksep">Rank spacing</label>
+      <input id="setting-ranksep" type="number" min="1" step="10">
+
+      <label for="setting-edgesep">Edge spacing</label>
+      <input id="setting-edgesep" type="number" min="1" step="5">
+
+      <label for="setting-zone-gap">Zone gap</label>
+      <input id="setting-zone-gap" type="number" min="0" step="20">
+    </div>
+    <div class="layout-tuner-actions">
+      <button onclick="applyLayoutSettings()">Apply</button>
+      <button onclick="resetLayoutSettings()">Reset Defaults</button>
+      <button onclick="copyLayoutSettings()">Copy Settings</button>
+    </div>
+    <div class="layout-tuner-status" id="layoutTunerStatus"></div>
+  </div>
+</div>
+
+<script>
+const CONNECTIONS = [{"from":"archive_controller_spec","to":"archive_controller","label":"tests","type":"test"},{"from":"bulk_actions_controller_spec","to":"bulk_actions_controller","label":"tests","type":"test"},{"from":"team_archiver_spec","to":"team_archiver","label":"tests","type":"test"},{"from":"archiver_spec","to":"archiver","label":"tests","type":"test"},{"from":"archive_controller","to":"team_archiver","label":"passes params","type":"calls"},{"from":"bulk_actions_controller","to":"archiver","label":"passes params","type":"calls"},{"from":"team_archiver","to":"archiver","label":"delegates to","type":"calls"},{"from":"archivetimeline","to":"archiveoptions","label":"showSkipCheck","type":"passes_prop"},{"from":"index","to":"archiveoptions","label":"showSkipCheck","type":"passes_prop"},{"from":"team_archiver","to":"team","label":"updates","type":"calls"},{"from":"archiver","to":"team","label":"reads","type":"calls"},{"from":"team_archiver","to":"archive_notification_job","label":"enqueues","type":"calls"},{"from":"archive_controller","to":"team_serializer","label":"renders","type":"calls"},{"from":"archive_controller","to":"permission_service","label":"checks permission","type":"calls"},{"from":"bulk_actions_controller","to":"permission_service","label":"checks permission","type":"calls"},{"from":"permission_service","to":"team","label":"reads role","type":"calls"},{"from":"team_spec","to":"team","label":"tests","type":"test"},{"from":"archive_notification_job_spec","to":"archive_notification_job","label":"tests","type":"test"},{"from":"permission_service_spec","to":"permission_service","label":"tests","type":"test"},{"from":"archive_modal","to":"archiveoptions","label":"renders","type":"passes_prop"},{"from":"archive_modal","to":"archive_button","label":"renders","type":"passes_prop"},{"from":"archiveoptions","to":"archive_button","label":"onArchive","type":"passes_prop"},{"from":"index","to":"archive_modal","label":"renders","type":"passes_prop"}];
+const GROUPS = {"paired":[[{"id":"archive_controller","type":"controller","dir":"controllers/team_projects","path":"app/controllers/team_projects/archive_controller.rb","status":"modified"},{"id":"archive_controller_spec","type":"spec","dir":"controllers/team_projects","path":"spec/controllers/team_projects/archive_controller_spec.rb","status":"modified"}],[{"id":"bulk_actions_controller","type":"controller","dir":"controllers/tasks","path":"app/controllers/tasks/bulk_actions_controller.rb","status":"modified"},{"id":"bulk_actions_controller_spec","type":"spec","dir":"controllers/tasks","path":"spec/controllers/tasks/bulk_actions_controller_spec.rb","status":"modified"}],[{"id":"team_archiver","type":"service","dir":"services/team_projects","path":"app/services/team_projects/team_archiver.rb","status":"modified"},{"id":"team_archiver_spec","type":"spec","dir":"services/team_projects","path":"spec/services/team_projects/team_archiver_spec.rb","status":"modified"}],[{"id":"archiver","type":"service","dir":"services/tasks","path":"app/services/tasks/archiver.rb","status":"modified"},{"id":"archiver_spec","type":"spec","dir":"services/tasks/archiver","path":"spec/services/tasks/archiver/archiver_spec.rb","status":"modified"}],[{"id":"team","type":"model","dir":"models","path":"app/models/team.rb","status":"modified"},{"id":"team_spec","type":"spec","dir":"models","path":"spec/models/team_spec.rb","status":"modified"}],[{"id":"archive_notification_job","type":"job","dir":"jobs","path":"app/jobs/archive_notification_job.rb","status":"new"},{"id":"archive_notification_job_spec","type":"spec","dir":"jobs","path":"spec/jobs/archive_notification_job_spec.rb","status":"new"}],[{"id":"permission_service","type":"service","dir":"services/permissions","path":"app/services/permissions/archive_permission_service.rb","status":"new"},{"id":"permission_service_spec","type":"spec","dir":"services/permissions","path":"spec/services/permissions/archive_permission_service_spec.rb","status":"new"}]],"unpaired_sources":[{"id":"archivetimeline","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/ArchiveTimeline.js","status":"modified"},{"id":"archiveoptions","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/ArchiveOptions.js","status":"modified"},{"id":"index","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/index.js","status":"modified"},{"id":"team_serializer","type":"serializer","dir":"serializers","path":"app/serializers/team_serializer.rb","status":"modified"},{"id":"add_skip_check_migration","type":"migration","dir":"db/migrate","path":"db/migrate/20240315_add_skip_completed_check_to_teams.rb","status":"new"},{"id":"routes_config","type":"config","dir":"config","path":"config/routes.rb","status":"modified"},{"id":"archive_button","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/ArchiveButton.js","status":"new"},{"id":"archive_modal","type":"component","dir":"frontend/js/ProjectArchive","path":"frontend/js/ProjectArchive/ArchiveModal.js","status":"new"}],"unpaired_specs":[{"id":"archiving_a_team_project_spec","type":"spec","dir":"features/projects/archiving","path":"spec/features/projects/archiving/archiving_a_team_project_spec.rb","status":"modified"},{"id":"archive_via_api_with_confirmation_spec","type":"spec","dir":"requests/api/v1/json/team_projects","path":"spec/requests/api/v1/json/team_projects/archive_via_api_with_confirmation_spec.rb","status":"modified"}]};
+const STORAGE_KEY = "diffmapper:Add skip-completed-check option for team project archiving";
+const CARD_WIDTH = 420;
+const GAP = 40;
+const PAIR_GAP = 60;
+const FILES_BY_ID = buildFileLookup();
+const DEFAULT_LAYOUT_SETTINGS = Object.freeze({
+  nodesep: 120,
+  ranksep: 120,
+  edgesep: 120,
+  zoneGap: 120
+});
+let layoutSettings = { ...DEFAULT_LAYOUT_SETTINGS };
+
+function buildFileLookup() {
+  const files = [
+    ...GROUPS.paired.flatMap(([source, spec]) => [source, spec]),
+    ...GROUPS.unpaired_sources,
+    ...GROUPS.unpaired_specs
+  ];
+
+  return new Map(files.map(file => [file.id, file]));
+}
+
+function fileMeta(id) {
+  return FILES_BY_ID.get(id) || { id: id, type: 'other', dir: 'other' };
+}
+
+function populateLayoutSettingsInputs(settings) {
+  document.getElementById('setting-nodesep').value = settings.nodesep;
+  document.getElementById('setting-ranksep').value = settings.ranksep;
+  document.getElementById('setting-edgesep').value = settings.edgesep;
+  document.getElementById('setting-zone-gap').value = settings.zoneGap;
+}
+
+function readSettingNumber(id, fallback, minValue = 0) {
+  const value = parseFloat(document.getElementById(id).value);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(minValue, value);
+}
+
+function currentLayoutSettings() {
+  layoutSettings = {
+    nodesep: Math.round(readSettingNumber('setting-nodesep', DEFAULT_LAYOUT_SETTINGS.nodesep, 1)),
+    ranksep: Math.round(readSettingNumber('setting-ranksep', DEFAULT_LAYOUT_SETTINGS.ranksep, 1)),
+    edgesep: Math.round(readSettingNumber('setting-edgesep', DEFAULT_LAYOUT_SETTINGS.edgesep, 1)),
+    zoneGap: Math.round(readSettingNumber('setting-zone-gap', DEFAULT_LAYOUT_SETTINGS.zoneGap, 0))
+  };
+  populateLayoutSettingsInputs(layoutSettings);
+  return layoutSettings;
+}
+
+function setLayoutTunerStatus(message) {
+  document.getElementById('layoutTunerStatus').textContent = message;
+}
+
+function applyLayoutSettings() {
+  currentLayoutSettings();
+  setLayoutTunerStatus('Applied current settings');
+  tidyLayout();
+}
+
+function resetLayoutSettings() {
+  layoutSettings = { ...DEFAULT_LAYOUT_SETTINGS };
+  populateLayoutSettingsInputs(layoutSettings);
+  setLayoutTunerStatus('Reset to defaults');
+  tidyLayout();
+}
+
+async function copyLayoutSettings() {
+  const text = JSON.stringify(currentLayoutSettings(), null, 2);
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+    }
+    setLayoutTunerStatus('Copied settings to clipboard');
+  } catch (error) {
+    setLayoutTunerStatus('Could not copy settings');
+  }
+}
+
+// Drag & drop
+let dragCard = null, dragOffsetX = 0, dragOffsetY = 0, topZ = 10;
+
+document.querySelectorAll('.card').forEach(card => {
+  card.addEventListener('mousedown', (e) => {
+    topZ++;
+    card.style.zIndex = topZ;
+    if (['SUMMARY','BUTTON','TEXTAREA','INPUT'].includes(e.target.tagName) || e.target.isContentEditable) return;
+    // Don't start drag if clicking the resize handle (bottom-right 18x18 area)
+    const rect = card.getBoundingClientRect();
+    if (e.clientX > rect.right - 18 && e.clientY > rect.bottom - 18) return;
+    dragCard = card;
+    dragCard.classList.add('dragging');
+    const cardLeft = parseFloat(card.style.left) || 0;
+    const cardTop = parseFloat(card.style.top) || 0;
+    const canvas = document.getElementById('canvas');
+    const canvasRect = canvas.getBoundingClientRect();
+    dragOffsetX = e.clientX - canvasRect.left + canvas.scrollLeft - cardLeft;
+    dragOffsetY = e.clientY - canvasRect.top + canvas.scrollTop - cardTop;
+  });
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!dragCard) return;
+  const canvas = document.getElementById('canvas');
+  const canvasRect = canvas.getBoundingClientRect();
+  dragCard.style.left = (e.clientX - canvasRect.left + canvas.scrollLeft - dragOffsetX) + 'px';
+  dragCard.style.top = (e.clientY - canvasRect.top + canvas.scrollTop - dragOffsetY) + 'px';
+  drawConnections();
+});
+
+document.addEventListener('mouseup', () => {
+  if (dragCard) {
+    dragCard.classList.remove('dragging');
+    topZ++;
+    dragCard.style.zIndex = topZ;
+    dragCard = null;
+    saveState();
+  }
+});
+
+// === Edge Router ===
+// Grid-based A* orthogonal router.
+// - Minimum gap from card edges (padding)
+// - Turn penalty to prefer straight runs
+// - Incremental soft-cost so parallel paths get lane spacing
+// - Label deconfliction
+
+const ROUTER = {
+  cellSize: 10,
+  cardPadding: 14,
+  turnPenalty: 3,
+  usedCellCost: 5,
+  margin: 60
+};
+
+let connectionsVisible = true;
+
+function toggleConnections() {
+  connectionsVisible = !connectionsVisible;
+  drawConnections();
+}
+
+// --- Grid construction ---
+
+function getCardRects() {
+  const rects = [];
+  document.querySelectorAll('.card').forEach(el => {
+    if (el.style.display === 'none') return;
+    rects.push({
+      id: el.id.replace('card-', ''),
+      x: parseFloat(el.style.left) || 0,
+      y: parseFloat(el.style.top) || 0,
+      w: el.offsetWidth,
+      h: el.offsetHeight
+    });
+  });
+  return rects;
+}
+
+function buildGrid(cardRects) {
+  const cs = ROUTER.cellSize;
+  const pad = ROUTER.cardPadding;
+  const margin = ROUTER.margin;
+
+  // Compute bounds from all cards
+  let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+  cardRects.forEach(r => {
+    minX = Math.min(minX, r.x - pad - margin);
+    minY = Math.min(minY, r.y - pad - margin);
+    maxX = Math.max(maxX, r.x + r.w + pad + margin);
+    maxY = Math.max(maxY, r.y + r.h + pad + margin);
+  });
+  minX = Math.floor(minX / cs) * cs;
+  minY = Math.floor(minY / cs) * cs;
+
+  const cols = Math.ceil((maxX - minX) / cs);
+  const rows = Math.ceil((maxY - minY) / cs);
+
+  // cost array: 0 = free, -1 = blocked, >0 = soft cost
+  const cells = new Uint16Array(rows * cols);
+
+  // Mark card interiors + padding as blocked
+  cardRects.forEach(r => {
+    const left = Math.floor((r.x - pad - minX) / cs);
+    const top = Math.floor((r.y - pad - minY) / cs);
+    const right = Math.ceil((r.x + r.w + pad - minX) / cs);
+    const bottom = Math.ceil((r.y + r.h + pad - minY) / cs);
+    for (let row = Math.max(0, top); row < Math.min(rows, bottom); row++) {
+      for (let col = Math.max(0, left); col < Math.min(cols, right); col++) {
+        cells[row * cols + col] = 65535; // blocked
+      }
+    }
+  });
+
+  return { cells, rows, cols, minX, minY, cs };
+}
+
+function worldToGrid(grid, x, y) {
+  return {
+    col: Math.round((x - grid.minX) / grid.cs),
+    row: Math.round((y - grid.minY) / grid.cs)
+  };
+}
+
+function gridToWorld(grid, col, row) {
+  return {
+    x: grid.minX + col * grid.cs,
+    y: grid.minY + row * grid.cs
+  };
+}
+
+// --- A* pathfinder ---
+
+function astar(grid, startCol, startRow, endCol, endRow) {
+  const { cells, rows, cols } = grid;
+  if (startCol === endCol && startRow === endRow) return [{ col: startCol, row: startRow }];
+
+  // Clamp to grid bounds
+  startCol = Math.max(0, Math.min(cols - 1, startCol));
+  startRow = Math.max(0, Math.min(rows - 1, startRow));
+  endCol = Math.max(0, Math.min(cols - 1, endCol));
+  endRow = Math.max(0, Math.min(rows - 1, endRow));
+
+  const key = (col, row) => row * cols + col;
+  const heuristic = (c, r) => Math.abs(c - endCol) + Math.abs(r - endRow);
+
+  // 0-3: orthogonal, 4-7: diagonal
+  const DIRS = [[0,-1],[1,0],[0,1],[-1,0],[1,-1],[1,1],[-1,1],[-1,-1]];
+  const DIR_COST = [1, 1, 1, 1, 1.4, 1.4, 1.4, 1.4];
+  const startKey = key(startCol, startRow);
+  const endKey = key(endCol, endRow);
+
+  const gScore = new Map();
+  const cameFrom = new Map();
+  const dirFrom = new Map(); // direction used to reach this cell
+  gScore.set(startKey, 0);
+
+  // Binary heap priority queue (simple array-based)
+  const open = [{ col: startCol, row: startRow, f: heuristic(startCol, startRow) }];
+  const inOpen = new Set([startKey]);
+  const closed = new Set();
+
+  while (open.length > 0) {
+    // Find lowest f (linear scan is fine for our grid sizes)
+    let bestIdx = 0;
+    for (let i = 1; i < open.length; i++) {
+      if (open[i].f < open[bestIdx].f) bestIdx = i;
+    }
+    const current = open[bestIdx];
+    open[bestIdx] = open[open.length - 1];
+    open.pop();
+
+    const ck = key(current.col, current.row);
+    if (ck === endKey) {
+      // Reconstruct path
+      const path = [];
+      let k = endKey;
+      while (k !== undefined) {
+        const r = Math.floor(k / cols);
+        const c = k % cols;
+        path.push({ col: c, row: r });
+        k = cameFrom.get(k);
+      }
+      path.reverse();
+      return path;
+    }
+
+    inOpen.delete(ck);
+    closed.add(ck);
+    const currentG = gScore.get(ck);
+    const currentDir = dirFrom.get(ck);
+
+    for (let d = 0; d < 8; d++) {
+      const nc = current.col + DIRS[d][0];
+      const nr = current.row + DIRS[d][1];
+      if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
+
+      const nk = key(nc, nr);
+      if (closed.has(nk)) continue;
+
+      const cellCost = cells[nk];
+      if (cellCost === 65535 && nk !== endKey) continue; // blocked (allow end cell)
+
+      let moveCost = DIR_COST[d] + (cellCost < 65535 ? cellCost : 0);
+      if (currentDir !== undefined && currentDir !== d) {
+        moveCost += ROUTER.turnPenalty;
+      }
+
+      const tentativeG = currentG + moveCost;
+      if (tentativeG < (gScore.get(nk) ?? Infinity)) {
+        gScore.set(nk, tentativeG);
+        cameFrom.set(nk, ck);
+        dirFrom.set(nk, d);
+        const f = tentativeG + heuristic(nc, nr);
+        if (!inOpen.has(nk)) {
+          open.push({ col: nc, row: nr, f });
+          inOpen.add(nk);
+        } else {
+          // Update f score in open list
+          for (let i = 0; i < open.length; i++) {
+            if (key(open[i].col, open[i].row) === nk) { open[i].f = f; break; }
+          }
+        }
+      }
+    }
+  }
+
+  // No path found — fall back to straight line
+  return null;
+}
+
+// --- Path simplification ---
+
+function simplifyPath(path) {
+  if (!path || path.length <= 2) return path;
+  const result = [path[0]];
+  for (let i = 1; i < path.length - 1; i++) {
+    const prev = result[result.length - 1];
+    const curr = path[i];
+    const next = path[i + 1];
+    // Keep point if direction changes (not collinear)
+    const dx1 = curr.col - prev.col;
+    const dy1 = curr.row - prev.row;
+    const dx2 = next.col - curr.col;
+    const dy2 = next.row - curr.row;
+    if (dx1 !== dx2 || dy1 !== dy2) result.push(curr);
+  }
+  result.push(path[path.length - 1]);
+  return result;
+}
+
+// --- Exit/entry point selection ---
+
+function pickExitSide(sourceRect, targetRect) {
+  const scx = sourceRect.x + sourceRect.w / 2;
+  const scy = sourceRect.y + sourceRect.h / 2;
+  const tcx = targetRect.x + targetRect.w / 2;
+  const tcy = targetRect.y + targetRect.h / 2;
+  const dx = tcx - scx;
+  const dy = tcy - scy;
+
+  if (Math.abs(dx) > Math.abs(dy)) {
+    return dx > 0 ? 'right' : 'left';
+  }
+  return dy > 0 ? 'bottom' : 'top';
+}
+
+function sideAnchor(rect, side, padding, offset) {
+  // offset is 0..1 along the side (0.5 = center)
+  switch (side) {
+    case 'top':    return { x: rect.x + rect.w * offset, y: rect.y - padding };
+    case 'bottom': return { x: rect.x + rect.w * offset, y: rect.y + rect.h + padding };
+    case 'left':   return { x: rect.x - padding,         y: rect.y + rect.h * offset };
+    case 'right':  return { x: rect.x + rect.w + padding, y: rect.y + rect.h * offset };
+  }
+}
+
+function cardEdgePoint(rect, side, offset) {
+  switch (side) {
+    case 'top':    return { x: rect.x + rect.w * offset, y: rect.y };
+    case 'bottom': return { x: rect.x + rect.w * offset, y: rect.y + rect.h };
+    case 'left':   return { x: rect.x,              y: rect.y + rect.h * offset };
+    case 'right':  return { x: rect.x + rect.w,     y: rect.y + rect.h * offset };
+  }
+}
+
+// --- Route a single edge ---
+
+function routeEdge(fromRect, toRect, grid, exitSide, entrySide, exitOffset, entryOffset) {
+  const pad = ROUTER.cardPadding;
+
+  const startWorld = sideAnchor(fromRect, exitSide, pad + 2, exitOffset);
+  const endWorld = sideAnchor(toRect, entrySide, pad + 2, entryOffset);
+
+  const startEdge = cardEdgePoint(fromRect, exitSide, exitOffset);
+  const endEdge = cardEdgePoint(toRect, entrySide, entryOffset);
+
+  // Temporarily unblock cells near the start/end anchors
+  const startCell = worldToGrid(grid, startWorld.x, startWorld.y);
+  const endCell = worldToGrid(grid, endWorld.x, endWorld.y);
+
+  const savedCells = unblockNearPoint(grid, startCell.col, startCell.row);
+  const savedCells2 = unblockNearPoint(grid, endCell.col, endCell.row);
+
+  const rawPath = astar(grid, startCell.col, startCell.row, endCell.col, endCell.row);
+
+  // Restore blocked cells
+  restoreCells(grid, savedCells);
+  restoreCells(grid, savedCells2);
+
+  if (!rawPath) {
+    // Fallback: straight line
+    return { points: [startEdge, endEdge], exitSide, entrySide };
+  }
+
+  const simplified = simplifyPath(rawPath);
+  const worldPoints = simplified.map(p => gridToWorld(grid, p.col, p.row));
+
+  // Prepend card edge, append card edge
+  const points = [startEdge, ...worldPoints, endEdge];
+
+  // Mark used cells with soft cost for lane spacing
+  rawPath.forEach(p => {
+    const idx = p.row * grid.cols + p.col;
+    if (grid.cells[idx] < 65535) {
+      grid.cells[idx] = Math.min(grid.cells[idx] + ROUTER.usedCellCost, 65534);
+    }
+  });
+
+  return { points, exitSide, entrySide };
+}
+
+function unblockNearPoint(grid, col, row) {
+  // Unblock a small 3x3 area around the anchor point
+  const saved = [];
+  const radius = 1;
+  for (let r = row - radius; r <= row + radius; r++) {
+    for (let c = col - radius; c <= col + radius; c++) {
+      if (r < 0 || r >= grid.rows || c < 0 || c >= grid.cols) continue;
+      const idx = r * grid.cols + c;
+      if (grid.cells[idx] === 65535) {
+        saved.push({ idx, val: 65535 });
+        grid.cells[idx] = 0;
+      }
+    }
+  }
+  return saved;
+}
+
+function restoreCells(grid, saved) {
+  saved.forEach(s => { grid.cells[s.idx] = s.val; });
+}
+
+// --- Label placement ---
+
+function placeLabelOnPath(points) {
+  // Place label at the midpoint of total path length (center of the route)
+  let totalLen = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const dx = points[i + 1].x - points[i].x;
+    const dy = points[i + 1].y - points[i].y;
+    totalLen += Math.sqrt(dx * dx + dy * dy);
+  }
+
+  const targetDist = totalLen / 2;
+  let walked = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const dx = points[i + 1].x - points[i].x;
+    const dy = points[i + 1].y - points[i].y;
+    const segLen = Math.sqrt(dx * dx + dy * dy);
+    if (walked + segLen >= targetDist) {
+      const t = (targetDist - walked) / segLen;
+      return {
+        x: points[i].x + dx * t,
+        y: points[i].y + dy * t - 8
+      };
+    }
+    walked += segLen;
+  }
+  // Fallback
+  const mid = Math.floor(points.length / 2);
+  return { x: points[mid].x, y: points[mid].y - 8 };
+}
+
+function deconflictLabels(labels) {
+  // Simple greedy nudge: if two labels overlap, push them apart vertically
+  const gap = 18;
+  for (let i = 0; i < labels.length; i++) {
+    for (let j = i + 1; j < labels.length; j++) {
+      const dx = Math.abs(labels[i].x - labels[j].x);
+      const dy = Math.abs(labels[i].y - labels[j].y);
+      if (dx < 70 && dy < gap) {
+        labels[j].y += gap - dy;
+      }
+    }
+  }
+}
+
+// --- Main draw function ---
+
+function drawConnections() {
+  const svg = document.getElementById('connections');
+  const defs = svg.querySelector('defs');
+  svg.innerHTML = '';
+  if (defs) svg.appendChild(defs);
+  if (!connectionsVisible) return;
+
+  const cardRects = getCardRects();
+  const rectMap = new Map(cardRects.map(r => [r.id, r]));
+
+  // Pre-compute sides and assign spread offsets
+  const edgeInfos = [];
+  const portCounts = new Map(); // key: "cardId:side" → count of connections using it
+
+  CONNECTIONS.forEach(conn => {
+    const fromRect = rectMap.get(conn.from);
+    const toRect = rectMap.get(conn.to);
+    if (!fromRect || !toRect) return;
+
+    const exitSide = pickExitSide(fromRect, toRect);
+    const entrySide = pickExitSide(toRect, fromRect);
+
+    const exitKey = conn.from + ':' + exitSide;
+    const entryKey = conn.to + ':' + entrySide;
+    portCounts.set(exitKey, (portCounts.get(exitKey) || 0) + 1);
+    portCounts.set(entryKey, (portCounts.get(entryKey) || 0) + 1);
+
+    edgeInfos.push({ conn, fromRect, toRect, exitSide, entrySide, exitKey, entryKey });
+  });
+
+  // Assign slot indices per port, sorted by opposite endpoint position
+  // For horizontal sides (top/bottom): sort by x of other endpoint
+  // For vertical sides (left/right): sort by y of other endpoint
+  const portGroups = new Map(); // key → array of edge indices
+  edgeInfos.forEach((info, idx) => {
+    if (!portGroups.has(info.exitKey)) portGroups.set(info.exitKey, []);
+    portGroups.get(info.exitKey).push({ idx, role: 'exit' });
+    if (!portGroups.has(info.entryKey)) portGroups.set(info.entryKey, []);
+    portGroups.get(info.entryKey).push({ idx, role: 'entry' });
+  });
+
+  portGroups.forEach((members, portKey) => {
+    const side = portKey.split(':')[1];
+    const isHorizontal = (side === 'top' || side === 'bottom');
+
+    members.sort((a, b) => {
+      const infoA = edgeInfos[a.idx];
+      const infoB = edgeInfos[b.idx];
+      // Sort by position of the OTHER endpoint
+      const rectA = a.role === 'exit' ? infoA.toRect : infoA.fromRect;
+      const rectB = b.role === 'exit' ? infoB.toRect : infoB.fromRect;
+      if (isHorizontal) {
+        return (rectA.x + rectA.w / 2) - (rectB.x + rectB.w / 2);
+      }
+      return (rectA.y + rectA.h / 2) - (rectB.y + rectB.h / 2);
+    });
+
+    members.forEach((member, slot) => {
+      if (member.role === 'exit') {
+        edgeInfos[member.idx].exitSlot = slot;
+      } else {
+        edgeInfos[member.idx].entrySlot = slot;
+      }
+    });
+  });
+
+  const grid = buildGrid(cardRects);
+  const labels = [];
+
+  edgeInfos.forEach(info => {
+    const { conn, fromRect, toRect, exitSide, entrySide, exitKey, entryKey } = info;
+    const exitTotal = portCounts.get(exitKey);
+    const entryTotal = portCounts.get(entryKey);
+
+    // Spread offsets: evenly distributed in the middle 60% of the side
+    const exitOffset = spreadOffset(info.exitSlot, exitTotal);
+    const entryOffset = spreadOffset(info.entrySlot, entryTotal);
+
+    const route = routeEdge(fromRect, toRect, grid, exitSide, entrySide, exitOffset, entryOffset);
+    const pts = route.points;
+
+    // Draw polyline
+    const pathData = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ',' + p.y).join(' ');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', pathData);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'var(--border)');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('marker-end', 'url(#arrowhead)');
+    svg.appendChild(path);
+
+    if (conn.label) {
+      const pos = placeLabelOnPath(pts);
+      labels.push({ ...pos, text: conn.label });
+    }
+  });
+
+  // Deconflict and render labels
+  deconflictLabels(labels);
+  labels.forEach(lbl => {
+    // Estimate text width (~6px per character)
+    const textW = lbl.text.length * 6 + 8;
+    const textH = 16;
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('x', lbl.x - textW / 2);
+    bg.setAttribute('y', lbl.y - textH + 2);
+    bg.setAttribute('width', textW);
+    bg.setAttribute('height', textH);
+    bg.setAttribute('class', 'conn-label-bg');
+    svg.appendChild(bg);
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', lbl.x);
+    text.setAttribute('y', lbl.y);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('class', 'conn-label');
+    text.textContent = lbl.text;
+    svg.appendChild(text);
+  });
+}
+
+function spreadOffset(slot, total) {
+  // Distribute connections in the middle 60% of the side (0.2 to 0.8)
+  if (total === 1) return 0.5;
+  return 0.2 + (slot / (total - 1)) * 0.6;
+}
+
+// Reset
+function resetLayout() {
+  layoutCards();
+  drawConnections();
+  saveState();
+}
+
+function clearSavedState() {
+  if (!confirm('Clear all review progress (notes, reviewed files, positions)?')) return;
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  location.reload();
+}
+
+// Layout
+function layoutCards() {
+  document.querySelectorAll('.card').forEach(card => {
+    card.style.visibility = 'visible';
+  });
+
+  const settings = currentLayoutSettings();
+  const nodeMap = buildMeasuredNodeMap();
+  const units = buildLayoutUnits(nodeMap);
+  const edges = buildLayoutEdges(nodeMap, units);
+  const components = buildLayoutComponents(units, edges);
+  const zones = buildComponentZones(components);
+
+  zones.forEach(zone => {
+    zone.components.forEach(component => {
+      layoutComponentWithDagre(component, settings);
+    });
+    measureZone(zone);
+  });
+
+  packZones(zones, settings);
+}
+
+function layoutComponentWithDagre(component, settings) {
+  if (component.units.length === 1) {
+    component.units[0].x = 0;
+    component.units[0].y = 0;
+    component.w = component.units[0].w;
+    component.h = component.units[0].h;
+    return;
+  }
+
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({
+    rankdir: 'TB',
+    nodesep: settings.nodesep,
+    ranksep: settings.ranksep,
+    edgesep: settings.edgesep,
+    marginx: 0,
+    marginy: 0
+  });
+  g.setDefaultEdgeLabel(function() { return {}; });
+
+  const unitById = new Map();
+  component.units.forEach(unit => {
+    const id = primaryIdForUnit(unit);
+    unitById.set(id, unit);
+    g.setNode(id, { width: unit.w, height: unit.h });
+  });
+
+  component.edges.forEach(edge => {
+    const sourceId = primaryIdForUnit(edge.source);
+    const targetId = primaryIdForUnit(edge.target);
+    if (unitById.has(sourceId) && unitById.has(targetId)) {
+      g.setEdge(sourceId, targetId);
+    }
+  });
+
+  dagre.layout(g);
+
+  let minX = Infinity;
+  let minY = Infinity;
+  g.nodes().forEach(nodeId => {
+    const pos = g.node(nodeId);
+    const unit = unitById.get(nodeId);
+    if (!unit) return;
+    unit.x = pos.x - unit.w / 2;
+    unit.y = pos.y - unit.h / 2;
+    minX = Math.min(minX, unit.x);
+    minY = Math.min(minY, unit.y);
+  });
+
+  component.units.forEach(unit => {
+    unit.x -= minX;
+    unit.y -= minY;
+  });
+
+  component.w = Math.max(...component.units.map(u => u.x + u.w));
+  component.h = Math.max(...component.units.map(u => u.y + u.h));
+}
+
+function packZones(zones, settings) {
+  const maxLayoutWidth = preferredLayoutWidth();
+  const zoneGap = settings.zoneGap;
+
+  let rowX = GAP;
+  let rowY = GAP;
+  let rowHeight = 0;
+  let maxX = 0;
+  let maxY = 0;
+
+  zones.forEach(zone => {
+    if (rowX > GAP && rowX + zone.w > maxLayoutWidth) {
+      rowX = GAP;
+      rowY += rowHeight + zoneGap;
+      rowHeight = 0;
+    }
+
+    placeZone(zone, rowX, rowY, zoneGap);
+    maxX = Math.max(maxX, rowX + zone.w);
+    maxY = Math.max(maxY, rowY + zone.h);
+    rowHeight = Math.max(rowHeight, zone.h);
+    rowX += zone.w + zoneGap;
+  });
+
+  const viewportWidth = Math.max(window.innerWidth - GAP * 2, 0);
+  document.getElementById('canvasInner').style.minHeight = (maxY + 400) + 'px';
+  document.getElementById('canvasInner').style.minWidth = Math.max(viewportWidth, maxX + GAP * 2) + 'px';
+}
+
+function placeZone(zone, x, y, zoneGap) {
+  let componentY = y;
+  zone.components.forEach(component => {
+    offsetComponent(component, x, componentY);
+    component.units.forEach(unit => applyUnitPosition(unit));
+    componentY += component.h + zoneGap;
+  });
+}
+
+function buildMeasuredNodeMap() {
+  const cards = Array.from(document.querySelectorAll('.card'));
+
+  return new Map(cards.map(el => {
+    const id = el.id.replace('card-', '');
+    const meta = fileMeta(id);
+
+    return [id, {
+      el: el,
+      id: id,
+      x: 0,
+      y: 0,
+      w: el.offsetWidth,
+      h: el.offsetHeight,
+      type: meta.type,
+      dir: meta.dir
+    }];
+  }));
+}
+
+
+function buildLayoutComponents(units, edges) {
+  const componentIds = buildConnectedComponents(units, edges);
+  const grouped = new Map();
+
+  units.forEach(unit => {
+    const componentId = componentIds.get(unit);
+    if (!grouped.has(componentId)) {
+      grouped.set(componentId, { id: componentId, units: [], edges: [] });
+    }
+
+    grouped.get(componentId).units.push(unit);
+  });
+
+  edges.forEach(edge => {
+    const componentId = componentIds.get(edge.source);
+    grouped.get(componentId).edges.push(edge);
+  });
+
+  return Array.from(grouped.values()).sort(compareLayoutComponents);
+}
+
+function buildComponentZones(components) {
+  const byZone = new Map();
+
+  components.forEach(component => {
+    const zoneId = layoutZoneForComponent(component);
+    if (!byZone.has(zoneId)) byZone.set(zoneId, []);
+    byZone.get(zoneId).push(component);
+  });
+
+  const zones = [];
+  [0, 1, 2].filter(zoneId => byZone.has(zoneId)).forEach(zoneId => {
+    const all = byZone.get(zoneId);
+    const connected = all.filter(c => c.edges.length > 0);
+    const solo = all.filter(c => c.edges.length === 0);
+
+    if (connected.length > 0) {
+      zones.push({ id: zoneId, components: connected, w: 0, h: 0 });
+    }
+    if (solo.length > 0) {
+      zones.push({ id: zoneId + 0.5, components: solo, w: 0, h: 0 });
+    }
+  });
+
+  return zones;
+}
+
+function measureZone(zone) {
+  const zoneGap = layoutSettings.zoneGap || 120;
+  zone.w = Math.max(...zone.components.map(c => c.w));
+  zone.h = zone.components.reduce((sum, c, i) => sum + (i > 0 ? zoneGap : 0) + c.h, 0);
+}
+
+function preferredLayoutWidth() {
+  const sidebarWidth = 320;
+  return Math.max(1200, window.innerWidth - sidebarWidth - GAP * 2);
+}
+
+function buildConnectedComponents(units, edges) {
+  const adjacency = new Map(units.map(unit => [unit, new Set()]));
+  edges.forEach(edge => {
+    adjacency.get(edge.source).add(edge.target);
+    adjacency.get(edge.target).add(edge.source);
+  });
+
+  const componentIds = new Map();
+  let nextId = 0;
+
+  units.forEach(unit => {
+    if (componentIds.has(unit)) return;
+
+    const stack = [unit];
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (componentIds.has(current)) continue;
+
+      componentIds.set(current, nextId);
+      adjacency.get(current).forEach(neighbor => {
+        if (!componentIds.has(neighbor)) stack.push(neighbor);
+      });
+    }
+
+    nextId += 1;
+  });
+
+  return componentIds;
+}
+
+function compareLayoutComponents(a, b) {
+  const zoneDelta = layoutZoneForComponent(a) - layoutZoneForComponent(b);
+  if (zoneDelta !== 0) return zoneDelta;
+
+  if (a.units.length !== b.units.length) return b.units.length - a.units.length;
+  if (a.edges.length !== b.edges.length) return b.edges.length - a.edges.length;
+
+  return componentPrimaryId(a).localeCompare(componentPrimaryId(b));
+}
+
+function layoutZoneForComponent(component) {
+  const dirs = component.units.map(unit => unit.dir || '');
+  const allSpecs = component.units.every(unit => unit.layoutType === 'spec');
+
+  if (dirs.some(dir => dir.startsWith('frontend/'))) return 1;
+  if (allSpecs) return 2;
+  return 0;
+}
+
+function componentPrimaryId(component) {
+  return component.units
+    .map(unit => primaryIdForUnit(unit))
+    .sort()[0] || '';
+}
+
+
+function offsetComponent(component, offsetX, offsetY) {
+  component.units.forEach(unit => {
+    unit.x += offsetX;
+    unit.y += offsetY;
+  });
+}
+
+function primaryIdForUnit(unit) {
+  return unit.primaryId || '';
+}
+
+
+
+function buildLayoutUnits(nodeMap) {
+  const units = [];
+  const paired = new Set();
+
+  // Test connections become rigid pairs
+  CONNECTIONS.filter(c => c.type === 'test').forEach(c => {
+    const source = nodeMap.get(c.to);  // the source file
+    const spec = nodeMap.get(c.from);  // the spec file
+    if (!source || !spec) return;
+
+    paired.add(source.id);
+    paired.add(spec.id);
+
+    units.push({
+      type: 'pair',
+      source: source,
+      spec: spec,
+      primaryId: source.id,
+      layoutType: source.type,
+      dir: source.dir,
+      x: Math.min(source.x, spec.x),
+      y: Math.min(source.y, spec.y),
+      w: source.w + PAIR_GAP + spec.w,
+      h: Math.max(source.h, spec.h)
+    });
+  });
+
+  // Unpaired nodes are their own units
+  nodeMap.forEach((node, id) => {
+    if (paired.has(id)) return;
+    units.push({
+      type: 'single',
+      node: node,
+      primaryId: node.id,
+      layoutType: node.type,
+      dir: node.dir,
+      x: node.x,
+      y: node.y,
+      w: node.w,
+      h: node.h
+    });
+  });
+
+  return units;
+}
+
+function buildLayoutEdges(nodeMap, units) {
+  const unitForNode = new Map();
+  units.forEach(u => {
+    if (u.type === 'pair') {
+      unitForNode.set(u.source.id, u);
+      unitForNode.set(u.spec.id, u);
+    } else {
+      unitForNode.set(u.node.id, u);
+    }
+  });
+
+  // Only non-test connections (test connections are already rigid pairs)
+  return CONNECTIONS
+    .filter(c => c.type !== 'test')
+    .map(c => ({
+      source: unitForNode.get(c.from),
+      target: unitForNode.get(c.to),
+      type: c.type
+    }))
+    .filter(e => e.source && e.target && e.source !== e.target);
+}
+
+function applyUnitPosition(unit) {
+  if (unit.type === 'pair') {
+    unit.source.el.style.left = Math.round(unit.x) + 'px';
+    unit.source.el.style.top = Math.round(unit.y) + 'px';
+    unit.spec.el.style.left = Math.round(unit.x + unit.source.w + PAIR_GAP) + 'px';
+    unit.spec.el.style.top = Math.round(unit.y) + 'px';
+  } else {
+    unit.node.el.style.left = Math.round(unit.x) + 'px';
+    unit.node.el.style.top = Math.round(unit.y) + 'px';
+  }
+}
+
+
+
+function tidyLayout() {
+  resetLayout();
+}
+
+function toggleAllDiffs() {
+  const allDiffs = document.querySelectorAll('.card-diff');
+  const anyOpen = Array.from(allDiffs).some(d => d.open);
+  allDiffs.forEach(d => { d.open = !anyOpen; });
+  setTimeout(() => { tidyLayout(); }, 50);
+}
+
+// Annotations (unified: LLM + user)
+function showAnnotationInput(btn) {
+  const area = btn.nextElementSibling;
+  area.style.display = 'block';
+  btn.style.display = 'none';
+  area.querySelector('.annotation-input').focus();
+}
+
+function cancelAnnotation(btn) {
+  const area = btn.closest('.annotation-input-area');
+  const addBtn = area.previousElementSibling;
+  area.querySelector('.annotation-input').value = '';
+  area.style.display = 'none';
+  addBtn.style.display = '';
+}
+
+function deleteAnnotation(btn) {
+  btn.closest('.annotation-item').remove();
+  updateQuestionCount();
+  updateSidebar();
+  saveState();
+}
+
+function toggleResolved(btn) {
+  const item = btn.closest('.annotation-item');
+  item.classList.toggle('resolved');
+  btn.title = item.classList.contains('resolved') ? 'Mark as open' : 'Mark as resolved';
+  updateQuestionCount();
+  updateSidebar();
+  saveState();
+}
+
+function saveAnnotation(btn) {
+  const area = btn.closest('.annotation-input-area');
+  const input = area.querySelector('.annotation-input');
+  const typeSelect = area.querySelector('.annotation-type-select');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const annType = typeSelect.value;
+  const container = area.closest('.card-annotations');
+  const list = container.querySelector('.annotations-list');
+
+  const item = document.createElement('div');
+  item.className = 'annotation-item ' + annType;
+  item.setAttribute('data-annotation-type', annType);
+
+  const textSpan = document.createElement('span');
+  textSpan.className = 'annotation-text';
+  textSpan.contentEditable = 'true';
+  textSpan.textContent = text;
+  item.appendChild(textSpan);
+
+  if (annType === 'question') {
+    const resolveBtn = document.createElement('button');
+    resolveBtn.className = 'annotation-resolve';
+    resolveBtn.textContent = '\u2713';
+    resolveBtn.title = 'Mark as resolved';
+    resolveBtn.onclick = () => { toggleResolved(resolveBtn); };
+    item.appendChild(resolveBtn);
+  }
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'annotation-delete';
+  deleteBtn.textContent = '\u00d7';
+  deleteBtn.onclick = () => { deleteAnnotation(deleteBtn); };
+  item.appendChild(deleteBtn);
+
+  list.appendChild(item);
+  input.value = '';
+  typeSelect.value = 'note';
+  cancelAnnotation(btn);
+  updateQuestionCount();
+  updateSidebar();
+  saveState();
+}
+
+function updateQuestionCount() {
+  const allQuestions = document.querySelectorAll('.annotation-item.question, .annotation-item.concern');
+  const openQuestions = Array.from(allQuestions).filter(el => !el.classList.contains('resolved'));
+  const counter = document.getElementById('openQuestions');
+  const total = openQuestions.length;
+  if (total > 0) {
+    counter.textContent = total + ' open question' + (total > 1 ? 's' : '');
+    counter.style.display = '';
+    counter.style.cursor = 'pointer';
+    counter.onclick = () => { toggleSidebar('questions'); };
+  } else {
+    counter.style.display = 'none';
+  }
+}
+
+// Sidebar
+let sidebarTab = 'files';
+const reviewedFiles = new Set();
+const hiddenTypes = new Set();
+
+function toggleSidebar(tab) {
+  sidebarTab = tab || 'files';
+  updateSidebarTabs();
+  updateSidebar();
+}
+
+function switchSidebarTab(tab) {
+  sidebarTab = tab;
+  updateSidebarTabs();
+  updateSidebar();
+}
+
+function updateSidebarTabs() {
+  document.querySelectorAll('.sidebar-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === sidebarTab);
+  });
+}
+
+function updateSidebar() {
+  const content = document.getElementById('sidebarContent');
+  if (!content) return;
+  renderFilterPills();
+  if (sidebarTab === 'files') {
+    renderFilesList(content);
+  } else {
+    renderQuestionsList(content);
+  }
+  updateSidebarTabCounts();
+}
+
+function updateSidebarTabCounts() {
+  const fileCount = FILES_BY_ID.size;
+  const questionCount = document.querySelectorAll('.annotation-item.question:not(.resolved), .annotation-item.concern:not(.resolved)').length;
+  const tabFiles = document.getElementById('tabFiles');
+  const tabQuestions = document.getElementById('tabQuestions');
+  if (tabFiles) tabFiles.textContent = 'Files (' + fileCount + ')';
+  if (tabQuestions) tabQuestions.textContent = 'Questions' + (questionCount > 0 ? ' (' + questionCount + ')' : '');
+}
+
+function renderFilterPills() {
+  const container = document.getElementById('sidebarFilters');
+  if (!container) return;
+  const allFiles = Array.from(FILES_BY_ID.values());
+  const types = [...new Set(allFiles.map(f => f.type || 'other'))].sort();
+  let html = '';
+  types.forEach(type => {
+    const active = !hiddenTypes.has(type);
+    html += `<button class="sidebar-filter-pill ${active ? 'active' : ''}" onclick="toggleTypeFilter('${type}')">${type}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+function toggleTypeFilter(type) {
+  if (hiddenTypes.has(type)) {
+    hiddenTypes.delete(type);
+  } else {
+    hiddenTypes.add(type);
+  }
+  applyTypeFilters();
+  updateSidebar();
+  saveState();
+}
+
+function applyTypeFilters() {
+  document.querySelectorAll('.card').forEach(card => {
+    const fileId = card.id.replace('card-', '');
+    const file = FILES_BY_ID.get(fileId);
+    const type = file ? (file.type || 'other') : 'other';
+    card.style.display = hiddenTypes.has(type) ? 'none' : '';
+  });
+  drawConnections();
+}
+
+function formatGroupHeader(dir) {
+  const parts = dir.split('/');
+  if (parts.length <= 2) return dir.toUpperCase().replace(/\//g, ' / ');
+  return ('\u2026 / ' + parts.slice(-2).join(' / ')).toUpperCase();
+}
+
+function renderFilesList(container) {
+  const allFiles = Array.from(FILES_BY_ID.values());
+  const visibleFiles = allFiles.filter(f => !hiddenTypes.has(f.type || 'other'));
+  const reviewedCount = visibleFiles.filter(f => reviewedFiles.has(f.id)).length;
+
+  let html = `<div class="sidebar-progress">`;
+  html += `<span>${reviewedCount}/${visibleFiles.length} reviewed</span>`;
+  html += `<button class="sidebar-check-all" onclick="toggleAllReviewed()">${reviewedCount === visibleFiles.length ? 'Uncheck all' : 'Check all'}</button>`;
+  html += `</div>`;
+
+  // Group by directory
+  const groups = new Map();
+  visibleFiles.forEach(file => {
+    const dir = file.dir || 'other';
+    if (!groups.has(dir)) groups.set(dir, []);
+    groups.get(dir).push(file);
+  });
+
+  groups.forEach((files, dir) => {
+    html += `<div class="sidebar-group-header">${formatGroupHeader(dir)}</div>`;
+    files.forEach(file => {
+      const reviewed = reviewedFiles.has(file.id);
+      const card = document.getElementById('card-' + file.id);
+      const questions = card ? card.querySelectorAll('.annotation-item.question:not(.resolved), .annotation-item.concern:not(.resolved)') : [];
+      const statusClass = file.status === 'new' ? 'has-new' : file.status === 'deleted' ? 'has-deleted' : 'has-modified';
+      const filePath = file.path || file.id;
+      const fileName = filePath.split('/').pop();
+      html += `<div class="sidebar-file-item ${statusClass} ${reviewed ? 'reviewed' : ''}" onclick="navigateToCard('${file.id}')">`;
+      html += `<input type="checkbox" class="file-check" ${reviewed ? 'checked' : ''} onclick="event.stopPropagation(); toggleReviewed('${file.id}', this.checked)">`;
+      html += `<div class="file-info">`;
+      html += `<span class="file-name">${fileName}</span>`;
+      html += `<span class="file-path">${filePath}</span>`;
+      html += `</div>`;
+      if (questions.length > 0) {
+        html += `<span class="question-indicator">${questions.length}?</span>`;
+      }
+      html += `</div>`;
+    });
+  });
+  container.innerHTML = html;
+}
+
+function toggleAllReviewed() {
+  const allFiles = Array.from(FILES_BY_ID.values());
+  const visibleFiles = allFiles.filter(f => !hiddenTypes.has(f.type || 'other'));
+  const allReviewed = visibleFiles.every(f => reviewedFiles.has(f.id));
+
+  visibleFiles.forEach(f => {
+    if (allReviewed) {
+      reviewedFiles.delete(f.id);
+    } else {
+      reviewedFiles.add(f.id);
+    }
+    syncReviewedState(f.id);
+  });
+  updateSidebar();
+  saveState();
+}
+
+function renderQuestionsList(container) {
+  const cards = document.querySelectorAll('.card');
+  let html = '';
+  cards.forEach(card => {
+    const questions = card.querySelectorAll('.annotation-item.question, .annotation-item.concern');
+    if (questions.length === 0) return;
+    const fileId = card.id.replace('card-', '');
+    const file = FILES_BY_ID.get(fileId);
+    const fileName = file ? file.path : fileId;
+    questions.forEach(q => {
+      const text = q.querySelector('.annotation-text')?.textContent || '';
+      const resolved = q.classList.contains('resolved');
+      html += `<div class="sidebar-question-item ${resolved ? 'resolved' : ''}" onclick="navigateToCard('${fileId}')">`;
+      html += `<div class="sq-file">${fileName}</div>`;
+      html += `<div class="sq-text">${resolved ? '✓ ' : '? '}${text}</div>`;
+      html += `</div>`;
+    });
+  });
+  if (!html) {
+    html = '<div style="padding: 12px; color: var(--text-dim);">No questions yet</div>';
+  }
+  container.innerHTML = html;
+}
+
+function toggleReviewed(fileId, checked) {
+  if (checked) {
+    reviewedFiles.add(fileId);
+  } else {
+    reviewedFiles.delete(fileId);
+  }
+  syncReviewedState(fileId);
+  updateSidebar();
+  saveState();
+}
+
+function syncReviewedState(fileId) {
+  const card = document.getElementById('card-' + fileId);
+  if (!card) return;
+  const checked = reviewedFiles.has(fileId);
+  card.classList.toggle('reviewed', checked);
+  const checkbox = card.querySelector('.card-reviewed-check');
+  if (checkbox) checkbox.checked = checked;
+}
+
+function copyFilename(el, path) {
+  navigator.clipboard.writeText(path).then(() => {
+    const badge = el.querySelector('.filename-copied');
+    badge.classList.add('show');
+    setTimeout(() => badge.classList.remove('show'), 1200);
+  });
+}
+
+function navigateToCard(fileId) {
+  const card = document.getElementById('card-' + fileId);
+  if (!card) return;
+  const canvas = document.getElementById('canvas');
+  const cardLeft = parseFloat(card.style.left) || 0;
+  const cardTop = parseFloat(card.style.top) || 0;
+  canvas.scrollTo({
+    left: cardLeft - 100,
+    top: cardTop - 100,
+    behavior: 'smooth'
+  });
+  card.style.outline = '2px solid var(--blue)';
+  card.style.outlineOffset = '4px';
+  setTimeout(() => {
+    card.style.outline = '';
+    card.style.outlineOffset = '';
+  }, 2000);
+}
+
+// Persistence
+function saveState() {
+  try {
+    const annotations = {};
+    document.querySelectorAll('.card').forEach(card => {
+      const fileId = card.id.replace('card-', '');
+      const items = card.querySelectorAll('.annotation-item');
+      if (items.length === 0) return;
+      annotations[fileId] = Array.from(items).map(el => ({
+        type: el.getAttribute('data-annotation-type') || 'note',
+        text: el.querySelector('.annotation-text')?.textContent || '',
+        resolved: el.classList.contains('resolved')
+      }));
+    });
+
+    const positions = {};
+    const sizes = {};
+    document.querySelectorAll('.card').forEach(card => {
+      const left = card.style.left;
+      const top = card.style.top;
+      if (left && top) {
+        positions[card.id] = { left, top };
+      }
+      const w = card.style.width;
+      const h = card.style.height;
+      if (w || h) {
+        sizes[card.id] = { width: w, height: h };
+      }
+    });
+
+    const state = {
+      reviewed: Array.from(reviewedFiles),
+      annotations: annotations,
+      positions: positions,
+      sizes: sizes,
+      hiddenTypes: Array.from(hiddenTypes)
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    // localStorage may be unavailable
+  }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const state = JSON.parse(raw);
+
+    if (state.reviewed) {
+      state.reviewed.forEach(id => {
+        reviewedFiles.add(id);
+        syncReviewedState(id);
+      });
+    }
+
+    if (state.annotations) {
+      Object.entries(state.annotations).forEach(([fileId, saved]) => {
+        const card = document.getElementById('card-' + fileId);
+        if (!card) return;
+        const list = card.querySelector('.annotations-list');
+        if (!list) return;
+
+        const existing = Array.from(list.querySelectorAll('.annotation-item')).map(el => ({
+          type: el.getAttribute('data-annotation-type') || 'note',
+          text: el.querySelector('.annotation-text')?.textContent || ''
+        }));
+
+        saved.forEach(ann => {
+          const alreadyExists = existing.some(e => e.type === ann.type && e.text === ann.text);
+          if (!alreadyExists) {
+            addAnnotationToDOM(list, ann.type, ann.text, ann.resolved);
+          } else if (ann.resolved) {
+            const match = Array.from(list.querySelectorAll('.annotation-item')).find(el =>
+              el.getAttribute('data-annotation-type') === ann.type &&
+              el.querySelector('.annotation-text')?.textContent === ann.text
+            );
+            if (match && !match.classList.contains('resolved')) {
+              match.classList.add('resolved');
+              const btn = match.querySelector('.annotation-resolve');
+              if (btn) btn.title = 'Mark as open';
+            }
+          }
+        });
+      });
+    }
+
+    if (state.positions) {
+      Object.entries(state.positions).forEach(([cardId, pos]) => {
+        const card = document.getElementById(cardId);
+        if (card) {
+          card.style.left = pos.left;
+          card.style.top = pos.top;
+        }
+      });
+    }
+
+    if (state.sizes) {
+      Object.entries(state.sizes).forEach(([cardId, size]) => {
+        const card = document.getElementById(cardId);
+        if (card) {
+          if (size.width) card.style.width = size.width;
+          if (size.height) card.style.height = size.height;
+        }
+      });
+    }
+
+    if (state.hiddenTypes) {
+      state.hiddenTypes.forEach(type => hiddenTypes.add(type));
+      applyTypeFilters();
+    }
+  } catch (e) {
+    // localStorage may be unavailable
+  }
+}
+
+function addAnnotationToDOM(list, annType, text, resolved) {
+  const item = document.createElement('div');
+  item.className = 'annotation-item ' + annType + (resolved ? ' resolved' : '');
+  item.setAttribute('data-annotation-type', annType);
+
+  const textSpan = document.createElement('span');
+  textSpan.className = 'annotation-text';
+  textSpan.contentEditable = 'true';
+  textSpan.textContent = text;
+  item.appendChild(textSpan);
+
+  if (annType === 'question' || annType === 'concern') {
+    const resolveBtn = document.createElement('button');
+    resolveBtn.className = 'annotation-resolve';
+    resolveBtn.textContent = '\u2713';
+    resolveBtn.title = resolved ? 'Mark as open' : 'Mark as resolved';
+    resolveBtn.onclick = () => { toggleResolved(resolveBtn); };
+    item.appendChild(resolveBtn);
+  }
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'annotation-delete';
+  deleteBtn.textContent = '\u00d7';
+  deleteBtn.onclick = () => { deleteAnnotation(deleteBtn); };
+  item.appendChild(deleteBtn);
+
+  list.appendChild(item);
+}
+
+// Init
+function adjustCanvasTop() {
+  const bar = document.getElementById('contextBar');
+  const canvas = document.getElementById('canvas');
+  if (bar && !bar.classList.contains('empty')) {
+    canvas.style.top = (46 + bar.offsetHeight) + 'px';
+  } else {
+    canvas.style.top = '46px';
+  }
+}
+
+function toggleContext() {
+  const bar = document.getElementById('contextBar');
+  const btn = document.getElementById('contextToggle');
+  bar.classList.toggle('open');
+  btn.textContent = bar.classList.contains('open') ? '▾ Details' : '▸ Details';
+  setTimeout(adjustCanvasTop, 220);
+}
+
+populateLayoutSettingsInputs(layoutSettings);
+adjustCanvasTop();
+layoutCards();
+loadState();
+drawConnections();
+updateQuestionCount();
+updateSidebar();
+window.addEventListener('resize', drawConnections);
+document.querySelectorAll('details').forEach(d => {
+  d.addEventListener('toggle', () => setTimeout(drawConnections, 10));
+});
+
+// Redraw connections when cards are resized
+const cardResizeObserver = new ResizeObserver(() => { drawConnections(); saveState(); });
+document.querySelectorAll('.card').forEach(card => cardResizeObserver.observe(card));
+</script>
+</body>
+</html>

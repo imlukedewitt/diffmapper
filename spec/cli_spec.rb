@@ -3,6 +3,8 @@
 require "diffmapper"
 require "diffmapper/parser"
 require "diffmapper/renderer"
+require "diffmapper/workspace"
+require "diffmapper/overriding_parser"
 require "diffmapper/cli"
 require "json"
 require "securerandom"
@@ -14,23 +16,47 @@ RSpec.describe Diffmapper::CLI do
 
   describe "parse command" do
     it "outputs valid JSON to stdout" do
-      output = capture_stdout { described_class.new(["parse"], stdin: diff_text).run }
+      output = capture_stdout { described_class.new(["parse", "--stdout"], stdin: diff_text).run }
       data = JSON.parse(output)
       expect(data["files"].length).to eq(13)
     end
 
     it "includes meta stats" do
-      output = capture_stdout { described_class.new(["parse"], stdin: diff_text).run }
+      output = capture_stdout { described_class.new(["parse", "--stdout"], stdin: diff_text).run }
       data = JSON.parse(output)
       expect(data["meta"]["stats"]["additions"]).to eq(149)
+    end
+
+    it "writes to workspace and prints path" do
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) do
+          output = capture_stdout { described_class.new(["parse"], stdin: diff_text).run }
+          path = output.strip
+          expect(File.exist?(path)).to be true
+          data = JSON.parse(File.read(path))
+          expect(data["files"].length).to eq(13)
+        end
+      end
     end
   end
 
   describe "render command" do
-    it "outputs HTML from a JSON file" do
+    it "outputs HTML to stdout with --stdout" do
       json_path = write_temp_json
-      output = capture_stdout { described_class.new(["render", json_path]).run }
+      output = capture_stdout { described_class.new(["render", json_path, "--stdout"]).run }
       expect(output).to include("<!DOCTYPE html>")
+    end
+
+    it "writes to workspace and prints path" do
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) do
+          json_path = write_temp_json
+          output = capture_stdout { described_class.new(["render", json_path]).run }
+          path = output.strip
+          expect(File.exist?(path)).to be true
+          expect(File.read(path)).to include("<!DOCTYPE html>")
+        end
+      end
     end
 
     it "aborts when file not found" do

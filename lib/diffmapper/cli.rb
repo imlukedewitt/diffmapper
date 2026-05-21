@@ -25,7 +25,14 @@ module Diffmapper
 
     def parse
       data = build_parser.call
-      puts JSON.pretty_generate(data)
+
+      if stdout_mode?
+        puts JSON.pretty_generate(data)
+      else
+        path = workspace.data_path(detect_branch)
+        File.write(path, JSON.pretty_generate(data))
+        puts path
+      end
     end
 
     def render
@@ -34,7 +41,15 @@ module Diffmapper
       abort "File not found: #{json_path}" unless File.exist?(json_path)
 
       data = JSON.parse(File.read(json_path), symbolize_names: true)
-      puts Renderer.new(data).call
+      html = Renderer.new(data).call
+
+      if stdout_mode?
+        puts html
+      else
+        path = resolve_html_path(data, json_path)
+        File.write(path, html)
+        puts path
+      end
     end
 
     def preview
@@ -46,27 +61,41 @@ module Diffmapper
       EnrichCommand.new(args).run
     end
 
+    def workspace
+      @workspace ||= Workspace.new
+    end
+
+    def stdout_mode?
+      args.delete("--stdout")
+    end
+
+    def detect_branch
+      ref = diff_ref
+      return "output" unless ref
+
+      parts = ref.split("...")
+      parts[1] || parts[0]
+    end
+
+    def resolve_html_path(data, json_path)
+      branch = data.dig(:meta, :branch) || File.basename(json_path, ".json")
+      workspace.html_path(branch)
+    end
+
     def build_parser
       diff_text = read_diff
-      parser = Parser.new(diff_text)
-      meta_override = detect_meta
-      OverridingParser.new(parser, meta_override)
+      OverridingParser.new(Parser.new(diff_text), detect_meta)
     end
 
     def read_diff
-      if diff_ref
-        run_git_diff(diff_ref)
-      elsif stdin
-        stdin
-      elsif !$stdin.tty?
-        $stdin.read
-      else
-        abort usage_message
-      end
+      return run_git_diff(diff_ref) if diff_ref
+      return stdin if stdin
+      return $stdin.read unless $stdin.tty?
+
+      abort usage_message
     end
 
     def diff_ref
-      # First non-flag argument is the diff ref (e.g., "master...feature")
       args.find { |a| !a.start_with?("-") }
     end
 
@@ -81,52 +110,24 @@ module Diffmapper
       ref = diff_ref
       return {} unless ref
 
-      parts = ref.split("...")
-      {
-        base: parts[0],
-        branch: parts[1],
-        title: humanize_branch(parts[1] || parts[0])
-      }.compact
+      base, branch = ref.split("...")
+      { base: base, branch: branch, title: humanize_branch(branch || base) }.compact
     end
 
-    def humanize_branch(branch)
-      branch
-        .sub(%r{^origin/}, "")
-        .gsub(/\b[A-Za-z]+-\d+[-_]?/, "") # strip ticket prefixes like PLS-1519
-        .gsub(%r{[_/-]}, " ")
-        .strip
-        .capitalize
+    def humanize_branch(name)
+      name.sub(%r{^origin/}, "").gsub(/\b[A-Za-z]+-\d+[-_]?/, "").gsub(%r{[_/-]}, " ").strip.capitalize
     end
 
     def usage_message
       <<~MSG
-        Usage:
-          diffmapper master...feature               Generate HTML canvas (default)
-          diffmapper parse master...feature           Parse diff to JSON
-          diffmapper render data.json                 Render JSON to HTML
+        Usage: diffmapper [parse|render|enrich|preview] [options]
+          diffmapper parse master...feature
+          diffmapper render data.json
           diffmapper enrich data.json context --summary "..."
           diffmapper enrich data.json file <id> --summary "..."
-          diffmapper enrich data.json file <id> --detail "label" "description"
-          diffmapper enrich data.json file <id> --annotation question "Is this safe?"
-          diffmapper enrich data.json file <id> --type service
-          diffmapper enrich data.json connection <from> <to> --label calls --type calls
-
-          git diff --no-ext-diff | diffmapper         Pipe diff in
+          diffmapper enrich data.json connection <from> <to> --label x --type x
+          git diff --no-ext-diff | diffmapper
       MSG
-    end
-  end
-
-  # Wraps Parser to inject meta overrides
-  class OverridingParser
-    extend Dry::Initializer
-
-    param :parser
-    param :overrides, default: -> { {} }
-
-    def call
-      result = parser.call
-      result[:meta].merge!(overrides)
-      result
     end
   end
 end
