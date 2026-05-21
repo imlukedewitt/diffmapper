@@ -227,6 +227,7 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Focus mode on card hover/drag (connected lines highlighted, others dimmed)
 - Colored arrowheads matching connection type
 - Light/dark theme toggle (defaults to system preference, persists to localStorage)
+- Zoom controls (Ctrl+scroll, +/− buttons, click percentage to reset, drag works at any zoom)
 - Removed layout tuner panel and legend (dead UI)
 - Drag performance optimizations (see below)
 - JS extracted from ERB into `canvas.js` with 75 unit tests (Node.js)
@@ -269,11 +270,6 @@ Baseline: 632ms per full redraw on 45-file/58-connection stress test.
   - Web Worker for background full reroute on drop
   - Incremental grid patching (only update moved card's cells)
   - Visibility graph instead of grid A* (fewer nodes for open spaces)
-
-### Zoom controls
-- Ability to adjust zoom level of the canvas
-- Could be CSS transform scale on the canvas container
-- Needs to coordinate with scroll position and card interactions
 
 ### Context files (not in diff)
 - Agent can add files to the map that weren't changed in the PR
