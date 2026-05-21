@@ -207,12 +207,28 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 
 ## Remaining Ideas
 
+### Connection line visual differentiation
+- Lines all look the same currently — hard to trace individual connections in busy areas
+- Ideas:
+  - Auto-color by connection type (test=one color, renders=another, calls=another)
+  - Alternating/cycling colors so adjacent lines are distinguishable
+  - "Focus" mode: hovering a card highlights its connections and dims others
+  - Could combine: type-based hue + opacity dim on non-focused lines
+- Focus interaction: on card hover, boost opacity/thickness of connected lines, fade the rest
+
 ### Pathfinding connection lines
 - Lines currently draw straight between cards, going behind other cards
 - Want "train tracks" style routing — lines path-find around obstacles
 - Orthogonal routing (right angles) or spline routing that avoids card rects
 - Could use a simple A* or visibility graph on card bounding boxes
 - Likely better as a separate routing layer on top of dagre, not by replacing dagre with ELK
+
+### Theming (light/dark mode)
+- Currently hardcoded to Tokyo Night dark theme
+- Need CSS custom property setup that switches between light and dark palettes
+- Could detect system preference via `prefers-color-scheme` media query
+- Add a toggle button in the toolbar
+- Persist choice to localStorage alongside other state
 
 ### Zoom controls
 - Ability to adjust zoom level of the canvas
