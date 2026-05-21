@@ -27,6 +27,11 @@
     --purple: #bb9af7;
     --cyan: #7dcfff;
     --connection-color: #7a88b0;
+    --conn-test: #f7768e;
+    --conn-calls: #7aa2f7;
+    --conn-renders: #9ece6a;
+    --conn-passes-prop: #e0af68;
+    --conn-styles: #bb9af7;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -423,16 +428,33 @@
     stroke-width: 1.5;
     stroke-dasharray: 6, 4;
   }
+  .connections path {
+    transition: opacity 0.2s, stroke-width 0.2s;
+  }
   .connections .conn-label {
     font-size: 10px;
     fill: var(--text);
     font-family: inherit;
+    transition: opacity 0.2s;
   }
   .connections .conn-label-bg {
     fill: var(--bg);
     opacity: 0.85;
     rx: 3;
     ry: 3;
+    transition: opacity 0.2s;
+  }
+  .connections.has-focus path,
+  .connections.has-focus .conn-label,
+  .connections.has-focus .conn-label-bg {
+    opacity: 0.3;
+  }
+  .connections.has-focus path.focused {
+    opacity: 1;
+  }
+  .connections.has-focus .conn-label.focused,
+  .connections.has-focus .conn-label-bg.focused {
+    opacity: 1;
   }
 
   .legend {
@@ -765,6 +787,21 @@
       <defs>
         <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
           <polygon points="0 0, 8 3, 0 6" fill="var(--connection-color)" />
+        </marker>
+        <marker id="arrowhead-test" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="var(--conn-test)" />
+        </marker>
+        <marker id="arrowhead-calls" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="var(--conn-calls)" />
+        </marker>
+        <marker id="arrowhead-renders" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="var(--conn-renders)" />
+        </marker>
+        <marker id="arrowhead-passes_prop" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="var(--conn-passes-prop)" />
+        </marker>
+        <marker id="arrowhead-styles" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="var(--conn-styles)" />
         </marker>
       </defs>
     </svg>
@@ -2275,6 +2312,7 @@ document.querySelectorAll('.card').forEach(card => {
     if (e.clientX > rect.right - 18 && e.clientY > rect.bottom - 18) return;
     dragCard = card;
     dragCard.classList.add('dragging');
+    focusCard(card.id.replace('card-', ''));
     const cardLeft = parseFloat(card.style.left) || 0;
     const cardTop = parseFloat(card.style.top) || 0;
     const canvas = document.getElementById('canvas');
@@ -2284,6 +2322,12 @@ document.querySelectorAll('.card').forEach(card => {
   });
 });
 
+document.querySelectorAll('.card').forEach(card => {
+  const fileId = card.id.replace('card-', '');
+  card.addEventListener('mouseenter', () => focusCard(fileId));
+  card.addEventListener('mouseleave', () => unfocusCards());
+});
+
 document.addEventListener('mousemove', (e) => {
   if (!dragCard) return;
   const canvas = document.getElementById('canvas');
@@ -2291,11 +2335,13 @@ document.addEventListener('mousemove', (e) => {
   dragCard.style.left = (e.clientX - canvasRect.left + canvas.scrollLeft - dragOffsetX) + 'px';
   dragCard.style.top = (e.clientY - canvasRect.top + canvas.scrollTop - dragOffsetY) + 'px';
   drawConnections();
+  focusCard(dragCard.id.replace('card-', ''));
 });
 
 document.addEventListener('mouseup', () => {
   if (dragCard) {
     dragCard.classList.remove('dragging');
+    unfocusCards();
     topZ++;
     dragCard.style.zIndex = topZ;
     dragCard = null;
@@ -2323,6 +2369,39 @@ let connectionsVisible = true;
 function toggleConnections() {
   connectionsVisible = !connectionsVisible;
   drawConnections();
+}
+
+function connMarker(type) {
+  const known = ['test', 'calls', 'renders', 'passes_prop', 'styles'];
+  if (known.includes(type)) return 'url(#arrowhead-' + type + ')';
+  return 'url(#arrowhead)';
+}
+
+function connColor(type) {
+  switch (type) {
+    case 'test':       return 'var(--conn-test)';
+    case 'calls':      return 'var(--conn-calls)';
+    case 'renders':    return 'var(--conn-renders)';
+    case 'passes_prop': return 'var(--conn-passes-prop)';
+    case 'styles':     return 'var(--conn-styles)';
+    default:           return 'var(--connection-color)';
+  }
+}
+
+function focusCard(fileId) {
+  const svg = document.getElementById('connections');
+  svg.classList.add('has-focus');
+  svg.querySelectorAll('path, text, rect').forEach(el => {
+    if (el.dataset.from === fileId || el.dataset.to === fileId) {
+      el.classList.add('focused');
+    }
+  });
+}
+
+function unfocusCards() {
+  const svg = document.getElementById('connections');
+  svg.classList.remove('has-focus');
+  svg.querySelectorAll('.focused').forEach(el => el.classList.remove('focused'));
 }
 
 // --- Grid construction ---
@@ -2749,14 +2828,16 @@ function drawConnections() {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', pathData);
     path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', 'var(--border)');
+    path.setAttribute('stroke', connColor(conn.type));
     path.setAttribute('stroke-width', '1.5');
-    path.setAttribute('marker-end', 'url(#arrowhead)');
+    path.setAttribute('marker-end', connMarker(conn.type));
+    path.dataset.from = conn.from;
+    path.dataset.to = conn.to;
     svg.appendChild(path);
 
     if (conn.label) {
       const pos = placeLabelOnPath(pts);
-      labels.push({ ...pos, text: conn.label });
+      labels.push({ ...pos, text: conn.label, from: conn.from, to: conn.to });
     }
   });
 
@@ -2772,6 +2853,8 @@ function drawConnections() {
     bg.setAttribute('width', textW);
     bg.setAttribute('height', textH);
     bg.setAttribute('class', 'conn-label-bg');
+    bg.dataset.from = lbl.from;
+    bg.dataset.to = lbl.to;
     svg.appendChild(bg);
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -2779,6 +2862,8 @@ function drawConnections() {
     text.setAttribute('y', lbl.y);
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('class', 'conn-label');
+    text.dataset.from = lbl.from;
+    text.dataset.to = lbl.to;
     text.textContent = lbl.text;
     svg.appendChild(text);
   });
