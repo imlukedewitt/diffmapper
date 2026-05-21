@@ -200,7 +200,6 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Resolvable questions (mark as resolved, dims + strikethrough)
 - Expand All Diffs toggle with re-layout
 - Dagre-based spatial layout (replaced custom force simulation)
-- Layout tuning panel (collapsible, collapsed by default)
 - Always-visible review sidebar with Files and Questions tabs (with counts)
 - File review checkboxes (on card header + sidebar, synced)
 - Sidebar file list with directory grouping, hover-to-show path, and progress counter
@@ -224,17 +223,13 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - Toolbar button grouping with separators
 - `diffmapper enrich` CLI subcommand (atomic in-place mutations, no JSON editing)
 - Workspace file management (`_diffmapper/` dir, per-branch JSON/HTML, `.diffmapper.yml` config)
+- Connection line color by type (test=pink, calls=blue, renders=green, passes_prop=orange, styles=purple)
+- Focus mode on card hover/drag (connected lines highlighted, others dimmed)
+- Colored arrowheads matching connection type
+- Light/dark theme toggle (defaults to system preference, persists to localStorage)
+- Removed layout tuner panel and legend (dead UI)
 
 ## Remaining Ideas
-
-### Connection line visual differentiation
-- Lines all look the same currently — hard to trace individual connections in busy areas
-- Ideas:
-  - Auto-color by connection type (test=one color, renders=another, calls=another)
-  - Alternating/cycling colors so adjacent lines are distinguishable
-  - "Focus" mode: hovering a card highlights its connections and dims others
-  - Could combine: type-based hue + opacity dim on non-focused lines
-- Focus interaction: on card hover, boost opacity/thickness of connected lines, fade the rest
 
 ### Connection line routing performance
 - Live redrawing during drag can lag on large PRs (20+ files)
@@ -245,13 +240,6 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
   - Throttle/debounce mousemove (requestAnimationFrame)
   - Reduce grid resolution during drag, refine on drop
   - Pre-compute which edges are affected by which cards
-
-### Theming (light/dark mode)
-- Currently hardcoded to Tokyo Night dark theme
-- Need CSS custom property setup that switches between light and dark palettes
-- Could detect system preference via `prefers-color-scheme` media query
-- Add a toggle button in the toolbar
-- Persist choice to localStorage alongside other state
 
 ### Zoom controls
 - Ability to adjust zoom level of the canvas
