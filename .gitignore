@@ -1,5 +1,6 @@
 output.html
 _diffmapper/
+_diffmapper/*
 *.gem
 .bundle/
 Gemfile.lock
