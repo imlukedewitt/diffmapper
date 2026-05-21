@@ -78,7 +78,7 @@ RSpec.describe "Canvas HTML", type: :browser do
   it "reset layout repositions cards without JS errors" do
     visit_generated_html
     first(".card-diff summary").click
-    click_button "Reset Layout"
+    click_button "Auto Arrange"
     expect(page).to have_css(".card", count: 13)
   end
 
