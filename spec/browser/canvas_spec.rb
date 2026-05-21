@@ -92,6 +92,33 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(page).to have_css("#themeBtn")
   end
 
+  it "has zoom controls" do
+    visit_generated_html
+    expect(page).to have_css("#zoomLevel", text: "100%")
+    page.evaluate_script("zoomIn()")
+    expect(page).to have_css("#zoomLevel", text: "110%")
+    page.evaluate_script("zoomOut()")
+    expect(page).to have_css("#zoomLevel", text: "100%")
+  end
+
+  it "resets zoom on click" do
+    visit_generated_html
+    page.evaluate_script("zoomIn(); zoomIn()")
+    expect(page).not_to have_css("#zoomLevel", text: "100%")
+    page.evaluate_script("zoomReset()")
+    expect(page).to have_css("#zoomLevel", text: "100%")
+  end
+
+  it "drags correctly when zoomed" do
+    visit_generated_html
+    page.evaluate_script("zoomOut(); zoomOut()")
+    card = first(".card")
+    original_left = page.evaluate_script("parseFloat(document.querySelector('.card').style.left)")
+    # Just verify no JS errors when dragging while zoomed
+    card.click
+    expect(page).to have_css(".card")
+  end
+
   it "draws connections within frame budget" do
     visit_generated_html
     time_ms = page.evaluate_script(

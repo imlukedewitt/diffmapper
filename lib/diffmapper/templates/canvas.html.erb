@@ -99,6 +99,7 @@
 
   .top-bar .controls { margin-left: auto; display: flex; gap: 6px; align-items: center; }
   .top-bar .controls .separator { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+  .zoom-level { font-size: 11px; color: var(--text-dim); min-width: 36px; text-align: center; cursor: pointer; }
 
   .open-questions {
     font-size: 11px;
@@ -135,6 +136,7 @@
     min-width: 2000px;
     min-height: 2000px;
     padding: 30px;
+    transform-origin: 0 0;
   }
 
   .connections {
@@ -713,6 +715,10 @@
     <button id="toggleConnBtn" onclick="toggleConnections()">Toggle Lines</button>
     <span class="separator"></span>
     <button id="themeBtn" onclick="cycleTheme()" title="Toggle theme">☾</button>
+    <span class="separator"></span>
+    <button onclick="zoomOut()" title="Zoom out">−</button>
+    <span id="zoomLevel" class="zoom-level" onclick="zoomReset()" title="Reset to 100%">100%</span>
+    <button onclick="zoomIn()" title="Zoom in">+</button>
     <span class="separator"></span>
     <button onclick="clearSavedState()">Clear Progress</button>
   </div>
