@@ -10,9 +10,13 @@ end
 Capybara.default_driver = :cuprite
 
 module BrowserTestHelper
-  def generate_html(diff_fixture: "real_pr.diff", data_overrides: {})
-    diff_text = File.read(File.join(__dir__, "../fixtures/diffs", diff_fixture))
-    data = Diffmapper::Parser.new(diff_text).call
+  def generate_html(diff_fixture: "real_pr.diff", data_overrides: {}, fixture: nil)
+    if fixture
+      data = JSON.parse(File.read(File.join(__dir__, "../../tmp/#{fixture}.json")), symbolize_names: true)
+    else
+      diff_text = File.read(File.join(__dir__, "../fixtures/diffs", diff_fixture))
+      data = Diffmapper::Parser.new(diff_text).call
+    end
     data.merge!(data_overrides)
     html = Diffmapper::Renderer.new(data).call
 

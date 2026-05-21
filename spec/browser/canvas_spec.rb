@@ -92,6 +92,32 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(page).to have_css("#themeBtn")
   end
 
+  it "draws connections within frame budget" do
+    visit_generated_html
+    time_ms = page.evaluate_script(
+      "(function() { var s = performance.now(); drawConnections(); return performance.now() - s; })()"
+    )
+    expect(time_ms).to be < 100
+  end
+
+  it "draws connections within budget for large canvas" do
+    visit_generated_html(fixture: "stress_test")
+    time_ms = page.evaluate_script(
+      "(function() { var s = performance.now(); drawConnections(); return performance.now() - s; })()"
+    )
+    expect(time_ms).to be < 1000
+  end
+
+  it "reroutes during drag within budget for large canvas" do
+    visit_generated_html(fixture: "stress_test")
+    # Warm up the cache
+    page.evaluate_script("drawConnections()")
+    time_ms = page.evaluate_script(
+      "(function() { var s = performance.now(); drawConnectionsForDrag('file_0'); return performance.now() - s; })()"
+    )
+    expect(time_ms).to be < 150
+  end
+
   describe "layered layout with connections" do
     let(:positions) do
       data = Diffmapper::Parser.new(

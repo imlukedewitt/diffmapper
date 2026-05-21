@@ -886,14 +886,21 @@ document.querySelectorAll('.card').forEach(card => {
   card.addEventListener('mouseleave', () => unfocusCards());
 });
 
+let dragRAF = null;
+
 document.addEventListener('mousemove', (e) => {
   if (!dragCard) return;
   const canvas = document.getElementById('canvas');
   const canvasRect = canvas.getBoundingClientRect();
   dragCard.style.left = (e.clientX - canvasRect.left + canvas.scrollLeft - dragOffsetX) + 'px';
   dragCard.style.top = (e.clientY - canvasRect.top + canvas.scrollTop - dragOffsetY) + 'px';
-  drawConnections();
-  focusCard(dragCard.id.replace('card-', ''));
+  if (!dragRAF) {
+    dragRAF = requestAnimationFrame(() => {
+      drawConnectionsForDrag(dragCard ? dragCard.id.replace('card-', '') : '');
+      focusCard(dragCard ? dragCard.id.replace('card-', '') : '');
+      dragRAF = null;
+    });
+  }
 });
 
 document.addEventListener('mouseup', () => {
@@ -903,7 +910,8 @@ document.addEventListener('mouseup', () => {
     topZ++;
     dragCard.style.zIndex = topZ;
     dragCard = null;
-    saveState();
+    // Defer full reroute so the drop feels instant
+    setTimeout(() => { drawConnections(); saveState(); }, 10);
   }
 });
 
@@ -979,8 +987,8 @@ function getCardRects() {
   return rects;
 }
 
-function buildGrid(cardRects) {
-  const cs = ROUTER.cellSize;
+function buildGrid(cardRects, cellSize) {
+  const cs = cellSize || ROUTER.cellSize;
   const pad = ROUTER.cardPadding;
   const margin = ROUTER.margin;
 
@@ -1033,7 +1041,7 @@ function gridToWorld(grid, col, row) {
 
 // --- A* pathfinder ---
 
-function astar(grid, startCol, startRow, endCol, endRow) {
+function astar(grid, startCol, startRow, endCol, endRow, maxIter) {
   const { cells, rows, cols } = grid;
   if (startCol === endCol && startRow === endRow) return [{ col: startCol, row: startRow }];
 
@@ -1061,8 +1069,11 @@ function astar(grid, startCol, startRow, endCol, endRow) {
   const open = [{ col: startCol, row: startRow, f: heuristic(startCol, startRow) }];
   const inOpen = new Set([startKey]);
   const closed = new Set();
+  const maxIterations = maxIter || Infinity;
+  let iterations = 0;
 
   while (open.length > 0) {
+    if (++iterations > maxIterations) return null; // bail out, use straight line
     // Find lowest f (linear scan is fine for our grid sizes)
     let bestIdx = 0;
     for (let i = 1; i < open.length; i++) {
@@ -1188,7 +1199,7 @@ function cardEdgePoint(rect, side, offset) {
 
 // --- Route a single edge ---
 
-function routeEdge(fromRect, toRect, grid, exitSide, entrySide, exitOffset, entryOffset) {
+function routeEdge(fromRect, toRect, grid, exitSide, entrySide, exitOffset, entryOffset, maxIter) {
   const pad = ROUTER.cardPadding;
 
   const startWorld = sideAnchor(fromRect, exitSide, pad + 2, exitOffset);
@@ -1204,7 +1215,7 @@ function routeEdge(fromRect, toRect, grid, exitSide, entrySide, exitOffset, entr
   const savedCells = unblockNearPoint(grid, startCell.col, startCell.row);
   const savedCells2 = unblockNearPoint(grid, endCell.col, endCell.row);
 
-  const rawPath = astar(grid, startCell.col, startCell.row, endCell.col, endCell.row);
+  const rawPath = astar(grid, startCell.col, startCell.row, endCell.col, endCell.row, maxIter);
 
   // Restore blocked cells
   restoreCells(grid, savedCells);
@@ -1300,19 +1311,51 @@ function deconflictLabels(labels) {
 
 // --- Main draw function ---
 
-function drawConnections() {
-  const svg = document.getElementById('connections');
-  const defs = svg.querySelector('defs');
-  svg.innerHTML = '';
-  if (defs) svg.appendChild(defs);
-  if (!connectionsVisible) return;
+// Cached route data for partial updates during drag
+let cachedRoutes = [];
+let cachedLabels = [];
 
+function drawConnections() {
+  const result = computeAllRoutes(ROUTER.cellSize);
+  cachedRoutes = result.routes;
+  cachedLabels = result.labels;
+  renderRoutes(cachedRoutes, cachedLabels);
+}
+
+function drawConnectionsForDrag(draggedId) {
+  const cardRects = getCardRects();
+  const rectMap = new Map(cardRects.map(r => [r.id, r]));
+  const grid = buildGrid(cardRects, ROUTER.cellSize * 3);
+
+  // Only reroute edges touching the dragged card
+  const updatedRoutes = cachedRoutes.map(route => {
+    if (route.from !== draggedId && route.to !== draggedId) return route;
+
+    const fromRect = rectMap.get(route.from);
+    const toRect = rectMap.get(route.to);
+    if (!fromRect || !toRect) return route;
+
+    const exitSide = pickExitSide(fromRect, toRect);
+    const entrySide = pickExitSide(toRect, fromRect);
+    const result = routeEdge(fromRect, toRect, grid, exitSide, entrySide, route.exitOffset, route.entryOffset, 2000);
+    return { ...route, points: result.points };
+  });
+
+  // Recompute labels only for affected edges
+  const updatedLabels = updatedRoutes
+    .filter(r => r.label)
+    .map(r => ({ ...placeLabelOnPath(r.points), text: r.label, from: r.from, to: r.to }));
+
+  renderRoutes(updatedRoutes, updatedLabels);
+}
+
+function computeAllRoutes(cellSize) {
   const cardRects = getCardRects();
   const rectMap = new Map(cardRects.map(r => [r.id, r]));
 
   // Pre-compute sides and assign spread offsets
   const edgeInfos = [];
-  const portCounts = new Map(); // key: "cardId:side" → count of connections using it
+  const portCounts = new Map();
 
   CONNECTIONS.forEach(conn => {
     const fromRect = rectMap.get(conn.from);
@@ -1331,9 +1374,7 @@ function drawConnections() {
   });
 
   // Assign slot indices per port, sorted by opposite endpoint position
-  // For horizontal sides (top/bottom): sort by x of other endpoint
-  // For vertical sides (left/right): sort by y of other endpoint
-  const portGroups = new Map(); // key → array of edge indices
+  const portGroups = new Map();
   edgeInfos.forEach((info, idx) => {
     if (!portGroups.has(info.exitKey)) portGroups.set(info.exitKey, []);
     portGroups.get(info.exitKey).push({ idx, role: 'exit' });
@@ -1348,7 +1389,6 @@ function drawConnections() {
     members.sort((a, b) => {
       const infoA = edgeInfos[a.idx];
       const infoB = edgeInfos[b.idx];
-      // Sort by position of the OTHER endpoint
       const rectA = a.role === 'exit' ? infoA.toRect : infoA.fromRect;
       const rectB = b.role === 'exit' ? infoB.toRect : infoB.fromRect;
       if (isHorizontal) {
@@ -1366,43 +1406,59 @@ function drawConnections() {
     });
   });
 
-  const grid = buildGrid(cardRects);
+  const grid = buildGrid(cardRects, cellSize);
+  const routes = [];
   const labels = [];
 
   edgeInfos.forEach(info => {
     const { conn, fromRect, toRect, exitSide, entrySide, exitKey, entryKey } = info;
     const exitTotal = portCounts.get(exitKey);
     const entryTotal = portCounts.get(entryKey);
-
-    // Spread offsets: evenly distributed in the middle 60% of the side
     const exitOffset = spreadOffset(info.exitSlot, exitTotal);
     const entryOffset = spreadOffset(info.entrySlot, entryTotal);
 
     const route = routeEdge(fromRect, toRect, grid, exitSide, entrySide, exitOffset, entryOffset);
-    const pts = route.points;
 
-    // Draw polyline
-    const pathData = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ',' + p.y).join(' ');
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', pathData);
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', connColor(conn.type));
-    path.setAttribute('stroke-width', '1.5');
-    path.setAttribute('marker-end', connMarker(conn.type));
-    path.dataset.from = conn.from;
-    path.dataset.to = conn.to;
-    svg.appendChild(path);
+    routes.push({
+      from: conn.from,
+      to: conn.to,
+      type: conn.type,
+      label: conn.label,
+      points: route.points,
+      exitOffset,
+      entryOffset
+    });
 
     if (conn.label) {
-      const pos = placeLabelOnPath(pts);
-      labels.push({ ...pos, text: conn.label, from: conn.from, to: conn.to });
+      labels.push({ ...placeLabelOnPath(route.points), text: conn.label, from: conn.from, to: conn.to });
     }
   });
 
-  // Deconflict and render labels
+  return { routes, labels };
+}
+
+function renderRoutes(routes, labels) {
+  const svg = document.getElementById('connections');
+  const defs = svg.querySelector('defs');
+  svg.innerHTML = '';
+  if (defs) svg.appendChild(defs);
+  if (!connectionsVisible) return;
+
+  routes.forEach(route => {
+    const pathData = route.points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ',' + p.y).join(' ');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', pathData);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', connColor(route.type));
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('marker-end', connMarker(route.type));
+    path.dataset.from = route.from;
+    path.dataset.to = route.to;
+    svg.appendChild(path);
+  });
+
   deconflictLabels(labels);
   labels.forEach(lbl => {
-    // Estimate text width (~6px per character)
     const textW = lbl.text.length * 6 + 8;
     const textH = 16;
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
