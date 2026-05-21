@@ -8,7 +8,7 @@ module Diffmapper
     param :args, default: -> { [] }
     option :stdin, default: -> {}
 
-    COMMANDS = %w[parse render preview].freeze
+    COMMANDS = %w[parse render preview enrich].freeze
 
     def run
       command = COMMANDS.include?(args.first) ? args.shift : "preview"
@@ -17,6 +17,7 @@ module Diffmapper
       when "parse" then parse
       when "render" then render
       when "preview" then preview
+      when "enrich" then enrich
       end
     end
 
@@ -39,6 +40,10 @@ module Diffmapper
     def preview
       data = build_parser.call
       puts Renderer.new(data).call
+    end
+
+    def enrich
+      EnrichCommand.new(args).run
     end
 
     def build_parser
@@ -98,7 +103,13 @@ module Diffmapper
         Usage:
           diffmapper master...feature               Generate HTML canvas (default)
           diffmapper parse master...feature           Parse diff to JSON
-          diffmapper render enriched.json             Render JSON to HTML
+          diffmapper render data.json                 Render JSON to HTML
+          diffmapper enrich data.json context --summary "..."
+          diffmapper enrich data.json file <id> --summary "..."
+          diffmapper enrich data.json file <id> --detail "label" "description"
+          diffmapper enrich data.json file <id> --annotation question "Is this safe?"
+          diffmapper enrich data.json file <id> --type service
+          diffmapper enrich data.json connection <from> <to> --label calls --type calls
 
           git diff --no-ext-diff | diffmapper         Pipe diff in
       MSG

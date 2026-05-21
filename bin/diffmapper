@@ -4,6 +4,8 @@
 require_relative "../lib/diffmapper"
 require_relative "../lib/diffmapper/parser"
 require_relative "../lib/diffmapper/renderer"
+require_relative "../lib/diffmapper/enricher"
+require_relative "../lib/diffmapper/enrich_command"
 require_relative "../lib/diffmapper/cli"
 require "json"
 
