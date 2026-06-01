@@ -8,6 +8,10 @@ Gem::Specification.new do |spec|
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.1"
 
-  spec.files = Dir["lib/**/*"]
+  spec.files = Dir["lib/**/*", "bin/*"]
+  spec.bindir = "bin"
+  spec.executables = ["diffmapper"]
   spec.metadata["rubygems_mfa_required"] = "true"
+
+  spec.add_dependency "dry-initializer", "~> 3.1"
 end
