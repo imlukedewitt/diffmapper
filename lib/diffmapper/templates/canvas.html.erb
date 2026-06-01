@@ -347,9 +347,7 @@
     font-size: 11px;
   }
   .annotation.note { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
-  .annotation.observation { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
   .annotation.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
-  .annotation.concern { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
 
   .card-annotations {
     margin-top: 8px;
@@ -370,9 +368,7 @@
     gap: 4px;
   }
   .annotation-item.note { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
-  .annotation-item.observation { background: rgba(158,206,106,0.12); border-left: 2px solid var(--green); color: var(--green); }
   .annotation-item.question { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
-  .annotation-item.concern { background: rgba(122,162,247,0.12); border-left: 2px solid var(--blue); color: var(--blue); }
   .annotation-item.resolved { opacity: 0.5; }
   .annotation-item.resolved .annotation-text { text-decoration: line-through; }
   .annotation-resolve {
@@ -839,7 +835,7 @@
             <%- (file[:annotations] || []).each do |ann| -%>
             <div class="annotation-item <%= ann[:type] %>" data-annotation-type="<%= ann[:type] %>">
               <span class="annotation-text" contenteditable="true"><%= ann[:text] %></span>
-              <%- if ann[:type] == 'question' || ann[:type] == 'concern' -%>
+              <%- if ann[:type] == 'question' -%>
               <button class="annotation-resolve" title="Mark as resolved" onclick="toggleResolved(this)">✓</button>
               <%- end -%>
               <button class="annotation-delete" onclick="deleteAnnotation(this)">×</button>

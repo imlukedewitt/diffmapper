@@ -82,7 +82,7 @@ output_dir: _luke/code-reviews
         { "label": "method name", "description": "what it does" }
       ],
       "annotations": [                   // LLM-provided
-        { "type": "observation|question|concern", "text": "..." }
+        { "type": "note|question", "text": "..." }
       ]
     }
   ],

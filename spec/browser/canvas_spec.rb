@@ -358,9 +358,9 @@ RSpec.describe "Canvas HTML", type: :browser do
       data = Diffmapper::Parser.new(
         File.read(File.join(__dir__, "../fixtures/diffs/real_pr.diff"))
       ).call
-      data[:files].first[:annotations] = [{ type: "observation", text: "Looks good" }]
+      data[:files].first[:annotations] = [{ type: "note", text: "Looks good" }]
       visit_generated_html(data_overrides: data)
-      expect(page).to have_css(".annotation-item.observation", text: "Looks good")
+      expect(page).to have_css(".annotation-item.note", text: "Looks good")
       first(".annotation-item").hover
       expect(page).to have_css(".annotation-delete")
     end
