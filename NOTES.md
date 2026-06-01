@@ -208,6 +208,9 @@ Apply button re-runs layout. Copy Settings button copies current values as JSON 
 - localStorage persistence (reviewed files, annotations, positions, sizes, filters)
 - Clear Progress button to reset localStorage for current PR
 - Connection line arrowheads
+- Editable details sections (add/delete/rename from UI, persisted to localStorage)
+- Always-present summary field with placeholder (editable even without LLM enrichment)
+- localStorage persistence for summaries and details (edits survive page reload)
 - Drag bugfix (cards no longer teleport when scrolled down)
 - Agent enrichment skill (`~/.pi/agent/skills/diffmapper-review`)
 - `diffmapper` symlinked to PATH (`~/bin/diffmapper`)

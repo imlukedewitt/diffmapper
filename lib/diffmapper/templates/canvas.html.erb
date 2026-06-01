@@ -263,16 +263,15 @@
   .line-counts .add { color: var(--green); }
   .line-counts .del { color: var(--red); }
 
-  .changed-section {
-    font-size: 11px;
-    color: var(--cyan);
-    padding: 1px 0;
-    font-style: italic;
-  }
-
   .card-summary {
     margin-top: 6px;
     font-size: 12px;
+  }
+  .card-summary:empty::before {
+    content: 'Add summary...';
+    color: var(--text-dim);
+    opacity: 0.5;
+    font-style: italic;
   }
   [contenteditable]:hover {
     outline: 1px dashed var(--border);
@@ -289,18 +288,57 @@
     background: var(--code-bg);
     border-radius: 4px;
     border-left: 2px solid var(--border);
+    position: relative;
   }
-  .card-details summary {
-    cursor: pointer;
+  .card-details .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .card-details .detail-label {
+    flex: 1;
+    min-width: 0;
     font-size: 11px;
     color: var(--text-dim);
     font-weight: 500;
   }
-  .card-details summary:hover { color: var(--text); }
+  .card-details .detail-delete {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    padding: 0 2px;
+  }
+  .card-details:hover .detail-delete { opacity: 0.7; }
+  .card-details .detail-delete:hover { opacity: 1 !important; }
   .card-details .detail-content {
     margin-top: 4px;
     font-size: 11px;
   }
+  .card-details .detail-content:empty::before {
+    content: 'Add content...';
+    color: var(--text-dim);
+    opacity: 0.5;
+    font-style: italic;
+  }
+  .add-detail-btn {
+    margin-top: 4px;
+    padding: 3px 8px;
+    font-size: 10px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    width: 100%;
+    text-align: left;
+  }
+  .add-detail-btn:hover { border-color: var(--text-dim); color: var(--text); }
 
   .annotation {
     margin-top: 6px;
@@ -784,19 +822,18 @@
           <span class="add">+<%= file[:additions] %></span>
           <span class="del">-<%= file[:deletions] %></span>
         </div>
-        <%- if file[:summary] -%>
         <div class="card-summary" contenteditable="true"><%= file[:summary] %></div>
-        <%- end -%>
+        <div class="card-details-list">
         <%- (file[:details] || []).each do |detail| -%>
-        <%- if detail[:description] -%>
-        <details class="card-details">
-          <summary><%= detail[:label] %></summary>
+        <div class="card-details">
+          <div class="detail-header"><span class="detail-label" contenteditable="true"><%= detail[:label] %></span><button class="detail-delete" onclick="deleteDetail(this)">&times;</button></div>
+          <%- if detail[:description] -%>
           <div class="detail-content" contenteditable="true"><%= detail[:description] %></div>
-        </details>
-        <%- else -%>
-        <div class="changed-section"><%= detail[:label] %></div>
+          <%- end -%>
+        </div>
         <%- end -%>
-        <%- end -%>
+        </div>
+        <button class="add-detail-btn" onclick="addDetail(this)">+ Add detail</button>
         <div class="card-annotations">
           <div class="annotations-list">
             <%- (file[:annotations] || []).each do |ann| -%>

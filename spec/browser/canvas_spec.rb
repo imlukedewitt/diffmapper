@@ -319,7 +319,6 @@ RSpec.describe "Canvas HTML", type: :browser do
 
     it "allows editing detail descriptions" do
       visit_generated_html(data_overrides: enriched_overrides)
-      first(".card-details summary").click
       detail = first(".detail-content")
       expect(detail["contenteditable"]).to eq("true")
     end
