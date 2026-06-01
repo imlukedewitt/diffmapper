@@ -70,6 +70,30 @@ RSpec.describe Diffmapper::CLI do
         suppress_stderr { described_class.new(["render"]).run }
       end.to raise_error(SystemExit)
     end
+
+    it "resolves branch name to workspace data path" do
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) do
+          data_dir = File.join(dir, "_diffmapper", "data")
+          FileUtils.mkdir_p(data_dir)
+          data = Diffmapper::Parser.new(diff_text).call
+          File.write(File.join(data_dir, "my-feature.json"), JSON.generate(data))
+
+          output = capture_stdout { described_class.new(["render", "my-feature", "--stdout"]).run }
+          expect(output).to include("<!DOCTYPE html>")
+        end
+      end
+    end
+
+    it "aborts when branch name not found in workspace" do
+      Dir.mktmpdir do |dir|
+        Dir.chdir(dir) do
+          expect do
+            suppress_stderr { described_class.new(["render", "nonexistent-branch"]).run }
+          end.to raise_error(SystemExit)
+        end
+      end
+    end
   end
 
   describe "preview command (default)" do

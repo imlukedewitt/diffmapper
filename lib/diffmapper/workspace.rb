@@ -19,6 +19,13 @@ module Diffmapper
       path
     end
 
+    def resolve_data_path(name)
+      path = File.join(data_dir, "#{slugify(name)}.json")
+      return path if File.exist?(path)
+
+      nil
+    end
+
     def html_path(branch)
       path = File.join(output_dir, "#{slugify(branch)}.html")
       FileUtils.mkdir_p(File.dirname(path))

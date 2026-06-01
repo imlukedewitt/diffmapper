@@ -13,18 +13,18 @@ Generate an interactive visual canvas for reviewing a PR or branch diff.
 
 ```bash
 cd <repo_directory>
-DATA=$(diffmapper parse <base>...<branch>)
+diffmapper parse <base>...<branch>
 ```
 
 - Use `master...origin/<branch>` or `main...origin/<branch>` depending on the repo's default branch.
 - If the user provides a diff ref directly, use it as-is.
 - Make sure the branch is `git fetch`
 - The command saves JSON to `_diffmapper/data/<branch>.json` and prints the path.
-- Remember the path for subsequent commands.
+- Subsequent commands accept the branch name directly (no need to capture the path).
 
 ### 2. Read and understand the diff
 
-Read the JSON file (path from step 1). Study the hunks for each file to understand:
+Read the JSON file (`_diffmapper/data/<branch>.json`). Study the hunks for each file to understand:
 - What each file change does (purpose, not line-by-line)
 - How files relate to each other (calls, renders, passes data, styles)
 - What a reviewer should pay attention to
@@ -36,37 +36,36 @@ Use `diffmapper enrich` commands to add context, summaries, details, annotations
 
 **Context:**
 ```bash
-diffmapper enrich "$DATA" context --summary "One-line summary of the PR"
-diffmapper enrich "$DATA" context --description "2-3 sentence description of what and why."
+diffmapper enrich <branch> context --summary "One-line summary of the PR"
+diffmapper enrich <branch> context --description "2-3 sentence description of what and why."
 ```
 
 **Per-file enrichment:**
 ```bash
-diffmapper enrich "$DATA" file <file_id> --summary "Purpose of this file's change"
-diffmapper enrich "$DATA" file <file_id> --detail "method_name" "What it does"
-diffmapper enrich "$DATA" file <file_id> --annotation question "Is this safe?"
-diffmapper enrich "$DATA" file <file_id> --annotation note "Uses legacy API intentionally"
-diffmapper enrich "$DATA" file <file_id> --type service
+diffmapper enrich <branch> file <file_id> --summary "Purpose of this file's change"
+diffmapper enrich <branch> file <file_id> --detail "updated #method_name" "What changed"
+diffmapper enrich <branch> file <file_id> --annotation question "Is this safe?"
+diffmapper enrich <branch> file <file_id> --annotation note "Uses legacy API intentionally"
+diffmapper enrich <branch> file <file_id> --type service
 ```
 
 **Connections:**
 ```bash
-diffmapper enrich "$DATA" connection <from_id> <to_id> --label calls --type calls
+diffmapper enrich <branch> connection <from_id> <to_id> --label calls --type calls
 ```
 
 More misc examples:
 ```bash
-diffmapper enrich "$DATA" context --summary "Add widget support"
-diffmapper enrich "$DATA" file widget --summary "Core widget model"
-diffmapper enrich "$DATA" file widget --detail "new #initialize" "Sets defaults from config"
-diffmapper enrich "$DATA" connection widget widget_service --label calls --type calls
+diffmapper enrich <branch> context --summary "Add widget support"
+diffmapper enrich <branch> file widget --summary "Core widget model"
+diffmapper enrich <branch> file widget --detail "new #initialize" "Sets defaults from config"
+diffmapper enrich <branch> connection widget widget_service --label calls --type calls
 ```
 
 ### 4. Render and open
 
 ```bash
-HTML=$(diffmapper render "$DATA")
-open "$HTML"
+open $(diffmapper render <branch>)
 ```
 
 The command saves HTML to `_diffmapper/<branch>.html` (or custom path from `.diffmapper.yml`) and prints the path.

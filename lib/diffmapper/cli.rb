@@ -39,30 +39,20 @@ module Diffmapper
     end
 
     def render
-      json_path = args.shift
-      abort "Usage: diffmapper render <file.json>" unless json_path
-      abort "File not found: #{json_path}" unless File.exist?(json_path)
+      arg = args.shift
+      abort "Usage: diffmapper render <file.json|branch>" unless arg
+
+      json_path = File.exist?(arg) ? arg : workspace.resolve_data_path(arg)
+      abort "File not found: #{arg}" unless json_path
 
       data = JSON.parse(File.read(json_path), symbolize_names: true)
       html = Renderer.new(data).call
-
-      if stdout_mode?
-        puts html
-      else
-        path = resolve_html_path(data, json_path)
-        File.write(path, html)
-        puts path
-      end
+      output_html(html, data, json_path)
     end
 
-    def preview
-      data = build_parser.call
-      puts Renderer.new(data).call
-    end
+    def preview = puts(Renderer.new(build_parser.call).call)
 
-    def enrich
-      EnrichCommand.new(args).run
-    end
+    def enrich = EnrichCommand.new(args).run
 
     def workspace
       @workspace ||= Workspace.new
@@ -82,6 +72,16 @@ module Diffmapper
     def resolve_html_path(data, json_path)
       branch = data.dig(:meta, :branch) || File.basename(json_path, ".json")
       workspace.html_path(branch)
+    end
+
+    def output_html(html, data, json_path)
+      if stdout_mode?
+        puts html
+      else
+        path = resolve_html_path(data, json_path)
+        File.write(path, html)
+        puts path
+      end
     end
 
     def build_parser

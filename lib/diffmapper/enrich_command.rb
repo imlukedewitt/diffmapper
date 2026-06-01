@@ -7,9 +7,11 @@ module Diffmapper
     param :args
 
     def run
-      json_path = args.shift
-      abort "Usage: diffmapper enrich <file.json> <target> [options]" unless json_path
-      abort "File not found: #{json_path}" unless File.exist?(json_path)
+      arg = args.shift
+      abort "Usage: diffmapper enrich <file.json|branch> <target> [options]" unless arg
+
+      json_path = resolve_json_arg(arg)
+      abort "File not found: #{arg}" unless json_path
 
       target = args.shift
       enricher = Enricher.new(json_path)
@@ -23,6 +25,12 @@ module Diffmapper
     end
 
     private
+
+    def resolve_json_arg(arg)
+      return arg if File.exist?(arg)
+
+      Workspace.new.resolve_data_path(arg)
+    end
 
     def enrich_context(enricher)
       opts = parse_flags("--summary", "--description")

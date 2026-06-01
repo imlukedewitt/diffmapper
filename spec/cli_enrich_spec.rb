@@ -77,4 +77,22 @@ RSpec.describe Diffmapper::EnrichCommand do
     expect(file[:summary]).to eq("Widget model")
     expect(file[:type]).to eq("service")
   end
+
+  it "resolves branch name to workspace data path" do
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir) do
+        data_dir = File.join(dir, "_diffmapper", "data")
+        FileUtils.mkdir_p(data_dir)
+        json_path = File.join(data_dir, "my-feature.json")
+        File.write(json_path, JSON.pretty_generate(base_data))
+
+        bin = File.expand_path("../bin/diffmapper", __dir__)
+        output = `ruby #{bin} enrich my-feature file widget --summary "From branch name" 2>&1`
+        expect($?.exitstatus).to eq(0), "CLI failed: #{output}"
+
+        result = JSON.parse(File.read(json_path), symbolize_names: true)
+        expect(result[:files][0][:summary]).to eq("From branch name")
+      end
+    end
+  end
 end
