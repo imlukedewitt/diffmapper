@@ -23,6 +23,7 @@ Requires Ruby >= 3.1.
 The canvas is useful on its own, but an LLM agent can add summaries, connections, and review annotations before rendering. Install the agent skill to teach your LLM the enrichment workflow:
 
 ```bash
+# install agent skill
 diffmapper setup
 ```
 
