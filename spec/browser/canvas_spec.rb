@@ -109,6 +109,71 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(page).to have_css("#zoomLevel", text: "100%")
   end
 
+  it "anchors zoom at mouse position" do
+    visit_generated_html
+    result = page.evaluate_script(<<~JS)
+      (function() {
+        var canvas = document.getElementById('canvas');
+        canvas.scrollLeft = 200;
+        canvas.scrollTop = 150;
+        var rect = canvas.getBoundingClientRect();
+        var mouseX = rect.left + 100;
+        var mouseY = rect.top + 100;
+
+        // Content point under cursor before zoom
+        var contentXBefore = (canvas.scrollLeft + 100) / currentZoom;
+        var contentYBefore = (canvas.scrollTop + 100) / currentZoom;
+
+        zoomAtPoint(1, mouseX, mouseY);
+
+        // Content point under cursor after zoom
+        var contentXAfter = (canvas.scrollLeft + 100) / currentZoom;
+        var contentYAfter = (canvas.scrollTop + 100) / currentZoom;
+
+        return {
+          zoom: currentZoom,
+          driftX: Math.abs(contentXBefore - contentXAfter),
+          driftY: Math.abs(contentYBefore - contentYAfter)
+        };
+      })()
+    JS
+    expect(result["zoom"]).to eq(1.1)
+    expect(result["driftX"]).to be < 1
+    expect(result["driftY"]).to be < 1
+  end
+
+  it "anchors zoom out at mouse position" do
+    visit_generated_html
+    result = page.evaluate_script(<<~JS)
+      (function() {
+        var canvas = document.getElementById('canvas');
+        zoomIn(); zoomIn(); zoomIn();
+        canvas.scrollLeft = 300;
+        canvas.scrollTop = 200;
+        var rect = canvas.getBoundingClientRect();
+        var mouseX = rect.left + 150;
+        var mouseY = rect.top + 120;
+
+        var contentXBefore = (canvas.scrollLeft + 150) / currentZoom;
+        var contentYBefore = (canvas.scrollTop + 120) / currentZoom;
+
+        zoomAtPoint(-1, mouseX, mouseY);
+
+        var contentXAfter = (canvas.scrollLeft + 150) / currentZoom;
+        var contentYAfter = (canvas.scrollTop + 120) / currentZoom;
+
+        return {
+          zoomedOut: currentZoom < 1.5,
+          driftX: Math.abs(contentXBefore - contentXAfter),
+          driftY: Math.abs(contentYBefore - contentYAfter)
+        };
+      })()
+    JS
+    expect(result["zoomedOut"]).to be true
+    expect(result["driftX"]).to be < 1
+    expect(result["driftY"]).to be < 1
+  end
+
   it "drags correctly when zoomed" do
     visit_generated_html
     page.evaluate_script("zoomOut(); zoomOut()")
