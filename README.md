@@ -7,9 +7,11 @@ Generate interactive HTML canvases from git diffs for visual PR review. Cards pe
 ## Quick Start
 
 ```bash
+# install
 git clone https://github.com/imlukedewitt/diffmapper.git
 cd diffmapper && gem build diffmapper.gemspec && gem install diffmapper-*.gem
 
+# create a diff map
 diffmapper master...feature > review.html
 open review.html
 ```
