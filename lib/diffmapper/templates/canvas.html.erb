@@ -818,13 +818,13 @@
           <span class="add">+<%= file[:additions] %></span>
           <span class="del">-<%= file[:deletions] %></span>
         </div>
-        <div class="card-summary" contenteditable="true"><%= file[:summary] %></div>
+        <div class="card-summary" contenteditable="true" spellcheck="false"><%= file[:summary] %></div>
         <div class="card-details-list">
         <%- (file[:details] || []).each do |detail| -%>
         <div class="card-details">
-          <div class="detail-header"><span class="detail-label" contenteditable="true"><%= detail[:label] %></span><button class="detail-delete" onclick="deleteDetail(this)">&times;</button></div>
+          <div class="detail-header"><span class="detail-label" contenteditable="true" spellcheck="false"><%= detail[:label] %></span><button class="detail-delete" onclick="deleteDetail(this)">&times;</button></div>
           <%- if detail[:description] -%>
-          <div class="detail-content" contenteditable="true"><%= detail[:description] %></div>
+          <div class="detail-content" contenteditable="true" spellcheck="false"><%= detail[:description] %></div>
           <%- end -%>
         </div>
         <%- end -%>
@@ -834,7 +834,7 @@
           <div class="annotations-list">
             <%- (file[:annotations] || []).each do |ann| -%>
             <div class="annotation-item <%= ann[:type] %>" data-annotation-type="<%= ann[:type] %>">
-              <span class="annotation-text" contenteditable="true"><%= ann[:text] %></span>
+              <span class="annotation-text" contenteditable="true" spellcheck="false"><%= ann[:text] %></span>
               <%- if ann[:type] == 'question' -%>
               <button class="annotation-resolve" title="Mark as resolved" onclick="toggleResolved(this)">✓</button>
               <%- end -%>
