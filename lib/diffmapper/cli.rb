@@ -8,7 +8,7 @@ module Diffmapper
     param :args, default: -> { [] }
     option :stdin, default: -> {}
 
-    COMMANDS = %w[parse render preview enrich].freeze
+    COMMANDS = %w[parse render preview enrich setup].freeze
 
     def run
       command = COMMANDS.include?(args.first) ? args.shift : "preview"
@@ -18,10 +18,13 @@ module Diffmapper
       when "render" then render
       when "preview" then preview
       when "enrich" then enrich
+      when "setup" then setup
       end
     end
 
     private
+
+    def setup = SetupCommand.new(args).run
 
     def parse
       data = build_parser.call
@@ -73,8 +76,7 @@ module Diffmapper
       ref = diff_ref
       return "output" unless ref
 
-      parts = ref.split("...")
-      parts[1] || parts[0]
+      ref.split("...").last
     end
 
     def resolve_html_path(data, json_path)
@@ -120,12 +122,11 @@ module Diffmapper
 
     def usage_message
       <<~MSG
-        Usage: diffmapper [parse|render|enrich|preview] [options]
+        Usage: diffmapper [parse|render|enrich|setup] [options]
           diffmapper parse master...feature
           diffmapper render data.json
-          diffmapper enrich data.json context --summary "..."
           diffmapper enrich data.json file <id> --summary "..."
-          diffmapper enrich data.json connection <from> <to> --label x --type x
+          diffmapper setup [skills-directory]
           git diff --no-ext-diff | diffmapper
       MSG
     end
