@@ -30,6 +30,10 @@ Key files:
 - **JS unit tests**: `node --test spec/js/*.js` — pure Node.js test runner, no extra tooling or build step. Tests live in `spec/js/` and cover the pure logic extracted into `lib/diffmapper/templates/canvas.js` (router, A*, grid, layout algorithms).
 - JS unit tests for pure logic (pathfinding, grid construction, layout math), Capybara for integration (visual layout, drag behavior, DOM interactions).
 
+## Versioning
+
+- Bump the patch version in `diffmapper.gemspec` when completing a fix or feature. Users install from the repo via `gem build` + `gem install`, so the version is how they know what they have.
+
 ## Output & Visual Testing
 
 - `_diffmapper/` is the workspace directory for generated output (gitignored). Render HTML here to visually verify changes: `ruby bin/diffmapper render tmp/output_layout_data.json --stdout > _diffmapper/output_layout_data.html`

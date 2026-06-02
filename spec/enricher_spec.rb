@@ -92,6 +92,30 @@ RSpec.describe Diffmapper::Enricher do
     end
   end
 
+  describe "file locking" do
+    def hold_lock_and_enrich
+      done = false
+      t = Thread.new do
+        enricher.enrich_context(summary: "after lock released")
+        done = true
+      end
+      sleep 0.15
+      [t, -> { done }]
+    end
+
+    it "blocks while another process holds the lock" do
+      File.open(tmpfile.path, File::RDWR) do |lock_file|
+        lock_file.flock(File::LOCK_EX)
+        t, done_check = hold_lock_and_enrich
+        expect(done_check.call).to be false
+        lock_file.flock(File::LOCK_UN)
+        t.join
+        expect(done_check.call).to be true
+      end
+      expect(read_data[:context][:summary]).to eq("after lock released")
+    end
+  end
+
   describe "#add_connection" do
     it "adds a new connection" do
       enricher.add_connection("foo", "bar", label: "calls", type: "calls")

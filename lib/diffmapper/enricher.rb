@@ -49,9 +49,14 @@ module Diffmapper
     end
 
     def mutate
-      data = JSON.parse(File.read(path), symbolize_names: true)
-      yield data
-      File.write(path, JSON.pretty_generate(data))
+      File.open(path, File::RDWR | File::CREAT) do |f|
+        f.flock(File::LOCK_EX)
+        data = JSON.parse(f.read, symbolize_names: true)
+        yield data
+        f.rewind
+        f.truncate(0)
+        f.write(JSON.pretty_generate(data))
+      end
     end
 
     def find_file(data, file_id)
