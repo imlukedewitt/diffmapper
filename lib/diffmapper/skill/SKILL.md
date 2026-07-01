@@ -100,7 +100,7 @@ HTML will be saved there instead.
 - Duplicate connections (same from/to/type) are skipped automatically.
 
 ### Annotations
-- Use sparingly. Only for things that genuinely deserve reviewer attention.
+- Use sparingly. Only for things that genuinely deserve reviewer attention. Leave annotations for high-risk areas that deserve a 2nd look from a human
 - `question`: something that seems off, risky, or unclear.
 - `note`: context that helps understand the change.
 - Don't annotate obvious things.
