@@ -79,8 +79,12 @@ HTML will be saved there instead.
 ## Enrichment Guidelines
 
 ### Summaries
+- The summary answers "what is this file and how does it fit into the picture?"
+- Focus on the file's role/purpose in the system, not what lines changed.
 - Bad: "Adds 20 lines to copy_clipboard.js"
-- Good: "Add click handler for generic copy-icon elements"
+- Bad: "Updated to support new widget config option"
+- Good: "Clipboard utility — handles copy-to-clipboard for all icon buttons"
+- Good: "CLI entry point that dispatches subcommands to their handler classes"
 - Be brief in your writing style
 
 ### Details
