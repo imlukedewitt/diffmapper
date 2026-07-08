@@ -37,10 +37,11 @@ RSpec.describe "Canvas HTML", type: :browser do
     expect(page).to have_css(".card")
   end
 
-  it "expands diff when clicking View diff" do
+  it "opens diff panel when clicking View diff" do
     visit_generated_html
-    first(".card-diff summary").click
-    expect(page).to have_css(".diff-content")
+    first(".view-diff-btn").click
+    expect(page).to have_css(".diff-panel.open")
+    expect(page).to have_css(".diff-panel-body .diff-content")
   end
 
   it "shows connection lines" do
@@ -77,7 +78,6 @@ RSpec.describe "Canvas HTML", type: :browser do
 
   it "reset layout repositions cards without JS errors" do
     visit_generated_html
-    first(".card-diff summary").click
     click_button "Auto Arrange"
     expect(page).to have_css(".card", count: 13)
   end
@@ -270,20 +270,22 @@ RSpec.describe "Canvas HTML", type: :browser do
     end
   end
 
-  it "expand all diffs opens all diff sections" do
+  it "diff panel navigates between files" do
     visit_generated_html
-    click_button "Expand All Diffs"
-    diff_count = page.all(".card-diff").count
-    open_count = page.all(".card-diff[open]").count
-    expect(open_count).to eq(diff_count)
+    first(".view-diff-btn").click
+    expect(page).to have_css(".diff-panel.open")
+    path_before = find("#diffPanelPath").text
+    find(".diff-panel-nav button:last-child").click
+    path_after = find("#diffPanelPath").text
+    expect(path_after).not_to eq(path_before)
   end
 
-  it "expand all diffs toggles closed when all are open" do
+  it "diff panel closes with close button" do
     visit_generated_html
-    click_button "Expand All Diffs"
-    click_button "Expand All Diffs"
-    open_count = page.all(".card-diff[open]").count
-    expect(open_count).to eq(0)
+    first(".view-diff-btn").click
+    expect(page).to have_css(".diff-panel.open")
+    find(".diff-panel-close").click
+    expect(page).not_to have_css(".diff-panel.open")
   end
 
   describe "annotations" do
